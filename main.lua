@@ -1,7 +1,7 @@
 -- main.lua
 do
-    _G.RepoBase = "https://raw.githubusercontent.com/YourUser/YourRepo/main/"
-    _G.ObsidianRepoBase = "https://raw.githubusercontent.com/WFYBGG/Obsidian/main/"
+    _G.RepoBase = "https://raw.githubusercontent.com/ratware-exe/repo/main/"
+    _G.ObsidianRepoBase = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 
     local loader = loadstring(game:HttpGet(_G.RepoBase .. "loader.lua"), "@loader.lua")()
 
