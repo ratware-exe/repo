@@ -147,35 +147,5 @@ do
         GlobalUnload()
     end
 
-    -- Optional: lightweight "shield" against telemetry remotes (kept here)
-    do
-        if hookfunction then
-            local remoteEventsFolder = RbxService.ReplicatedStorage:FindFirstChild("RemoteEvents")
-            if remoteEventsFolder then
-                local namePatterns = { "GA", "Report", "Log", "Analytics", "Telemetry", "Error" }
-                local function isTelemetryName(remoteName)
-                    for patternIndex = 1, #namePatterns do
-                        if string.find(remoteName, namePatterns[patternIndex], 1, true) then
-                            return true
-                        end
-                    end
-                    return false
-                end
-                local sampleRemote = remoteEventsFolder:FindFirstChildOfClass("RemoteEvent")
-                if sampleRemote then
-                    local fireServerMethod = sampleRemote.FireServer
-                    local originalFireServer
-                    originalFireServer = hookfunction(fireServerMethod, function(self, ...)
-                        if self:IsA("RemoteEvent") and isTelemetryName(self.Name) then
-                            return
-                        else
-                            return originalFireServer(self, ...)
-                        end
-                    end)
-                end
-            end
-        end
-    end
-
     return Api
 end
