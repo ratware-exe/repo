@@ -23,8 +23,8 @@ do
     Library.ShowToggleFrameInKeybinds = true
 
     local Window = Library:CreateWindow({
-        Title = "WFYB.GG",
-        Footer = "Youtube.com/@WFYBExploits | Version: 4.0 | Made in Mumbai, India",
+        Title = "R🐀TWARE",
+        Footer = "Youtube.com/@RATWARE | Version: 1.0 | Made in Mumbai, India",
         Size = UDim2.fromOffset(500, 600),
         Icon = 115235675063771,
         NotifySide = "Right",
@@ -122,9 +122,9 @@ do
     SaveManager:SetLibrary(Library)
     SaveManager:IgnoreThemeSettings()
     SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
-    ThemeManager:SetFolder("WFYBGG_V4")
-    SaveManager:SetFolder("WFYBGG_V4/WhateverFloatsYourBoat")
-    SaveManager:SetSubFolder("Current")
+    ThemeManager:SetFolder("RATWARE_V1")
+    SaveManager:SetFolder("RATWARE_V1/Universal")
+    SaveManager:SetSubFolder("Save")
     SaveManager:BuildConfigSection(Tabs.Settings)
     ThemeManager:ApplyToTab(Tabs.Settings)
     SaveManager:LoadAutoloadConfig()
