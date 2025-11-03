@@ -1,11 +1,16 @@
 -- dependency/Maid.lua
 do
-    local globalEnv = (getgenv and getgenv()) or _G
-    local Signal = globalEnv.Signal
+    local GlobalEnv = (getgenv and getgenv()) or _G
+
+    -- Prefer an existing Signal from either environment
+    local Signal = rawget(GlobalEnv, "Signal") or rawget(_G, "Signal")
     if not Signal then
-        local repoBase = globalEnv.RepoBase or error("Set _G.RepoBase before loading Maid.lua")
+        -- Accept RepoBase from either environment
+        local repoBase = rawget(GlobalEnv, "RepoBase") or rawget(_G, "RepoBase")
+        assert(type(repoBase) == "string" and #repoBase > 0,
+            "Set _G.RepoBase or getgenv().RepoBase before loading Maid.lua")
         Signal = loadstring(game:HttpGet(repoBase .. "dependency/Signal.lua"), "@Signal.lua")()
-        globalEnv.Signal = Signal
+        GlobalEnv.Signal = Signal -- cache for subsequent loads
     end
 
     local Maid = {}
@@ -30,15 +35,10 @@ do
         if Maid[index] ~= nil then
             error(("'%s' is reserved"):format(tostring(index)), 2)
         end
-
         local tasksTable = self.MaidTasks
         local oldTask = tasksTable[index]
-        if oldTask == newTask then
-            return
-        end
-
+        if oldTask == newTask then return end
         tasksTable[index] = newTask
-
         if oldTask then
             if type(oldTask) == "function" then
                 oldTask()
@@ -67,32 +67,28 @@ do
 
     function Maid:DoCleaning()
         local tasksTable = self.MaidTasks
-
-        for key, taskInstance in pairs(tasksTable) do
-            if typeof(taskInstance) == "RBXScriptConnection" then
+        for key, conn in pairs(tasksTable) do
+            if typeof(conn) == "RBXScriptConnection" then
                 tasksTable[key] = nil
-                taskInstance:Disconnect()
+                conn:Disconnect()
             end
         end
-
         local nextKey, nextTask = next(tasksTable)
         while nextTask ~= nil do
             tasksTable[nextKey] = nil
-
             if type(nextTask) == "function" then
                 nextTask()
             elseif typeof(nextTask) == "RBXScriptConnection" then
                 nextTask:Disconnect()
-            elseif Signal.isSignal(nextTask) then
-                nextTask:Destroy()
             elseif type(nextTask) == "table" and nextTask.Remove then
                 nextTask:Remove()
+            elseif Signal.isSignal(nextTask) then
+                nextTask:Destroy()
             elseif typeof(nextTask) == "thread" then
                 task.cancel(nextTask)
             elseif nextTask.Destroy then
                 nextTask:Destroy()
             end
-
             nextKey, nextTask = next(tasksTable)
         end
     end
