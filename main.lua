@@ -12,7 +12,7 @@ do
 
     local featurePaths = {
         -- If you split Shield out earlier, put it first:
-        -- "modules/Shield.lua",
+        "modules/Shield.lua",
         "modules/VIPServerCommands.lua",
         "modules/InfZoom.lua",
         "modules/AntiAFK.lua",
