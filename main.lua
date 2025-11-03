@@ -16,7 +16,7 @@ do
         "modules/VIPServerCommands.lua",
         "modules/InfZoom.lua",
         "modules/AntiAFK.lua",
-        "modules/UltraAFK.lua",
+        "modules/Optimization.lua",
     }
 
     for i = 1, #featurePaths do
