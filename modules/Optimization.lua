@@ -74,8 +74,8 @@ local Variables = {
         FullBright              = true,
         FullBrightLevel         = 2,      -- 0..5
         
-        RemoveFog               = false, -- NEW
-        RemoveSkybox            = false, -- NEW
+        RemoveFog               = false, 
+        RemoveSkybox            = false, 
 
         UseMinimumQuality       = true,
         ForceClearBlurOnRestore = true,
@@ -104,13 +104,21 @@ local Variables = {
         LightingProps      = { 
             FogStart = nil,
             FogEnd = nil,
-            FogColor = nil
+            FogColor = nil,
+            -- Snapshot full lighting state
+            GlobalShadows = nil,
+            Brightness = nil,
+            ClockTime = nil,
+            Ambient = nil,
+            OutdoorAmbient = nil,
+            EnvironmentDiffuseScale = nil,
+            EnvironmentSpecularScale = nil
         },  -- saved lighting fields
         PostEffects        = {},  -- Effect -> Enabled
         TerrainDecoration  = nil, -- bool
         QualityLevel       = nil, -- Enum.QualityLevel
 
-        Skyboxes           = {}, -- NEW: To store removed skyboxes
+        Skyboxes           = {}, -- To store removed skyboxes
 
         TerrainWater = {          -- for Terrain mimic mode
             WaterTransparency= nil,
@@ -136,12 +144,11 @@ local Variables = {
         desiredEnabled   = false, -- last requested state
         cancelRequested  = false, -- request current pass to stop early
         transitionId     = 0,     -- increases for every master transition
-        -- 'sweepToken' system is fully removed
     },
 }
 
 ----------------------------------------------------------------------
--- Anti‑race helpers (NEW)
+-- Anti‑race helpers
 ----------------------------------------------------------------------
 local function shouldCancel()
     return Variables.Runtime.cancelRequested
@@ -596,13 +603,27 @@ local function restoreAnchoredParts()
     end
 end
 
+-- NEW:Constraint disabler, from V2.lua
+local function disableConstraint(instance)
+    if not Variables.Config.DisableConstraints then return false end
+    local localPlayer = RbxService.Players.LocalPlayer
+    if localPlayer and localPlayer.Character and instance:IsDescendantOf(localPlayer.Character) then return false end
+    if instance:IsA("Motor6D") then return false end
+    if instance:IsA("Constraint") or instance:IsA("HingeConstraint") or instance:IsA("RodConstraint")
+       or instance:IsA("AlignPosition") or instance:IsA("AlignOrientation") then
+        if instance.Enabled ~= nil then
+            storeOnce(Variables.Snapshot.ConstraintEnabled, instance, instance.Enabled)
+            pcall(function() instance.Enabled = false end)
+        end
+        return true
+    end
+    return false
+end
+
 local function disableWorldConstraints()
     eachDescendantChunked(RbxService.Workspace,
-        function(inst) return inst:IsA("Constraint") and not inst:IsA("Motor6D") end,
-        function(c)
-            storeOnce(Variables.Snapshot.ConstraintEnabled, c, c.Enabled)
-            pcall(function() c.Enabled = false end)
-        end
+        function(inst) return (inst:IsA("Constraint") or inst:IsA("AlignPosition") or inst:IsA("AlignOrientation")) end,
+        disableConstraint
     )
 end
 
@@ -671,18 +692,17 @@ end
 ----------------------------------------------------------------------
 local function snapshotLighting()
     local L = RbxService.Lighting
-    Variables.Snapshot.LightingProps = {
-        GlobalShadows           = L.GlobalShadows,
-        Brightness              = L.Brightness,
-        ClockTime               = L.ClockTime,
-        Ambient                 = L.Ambient,
-        OutdoorAmbient          = L.OutdoorAmbient,
-        EnvironmentDiffuseScale = L.EnvironmentDiffuseScale,
-        EnvironmentSpecularScale= L.EnvironmentSpecularScale,
-        FogStart                = L.FogStart,
-        FogEnd                  = L.FogEnd,
-        FogColor                = L.FogColor,
-    }
+    local P = Variables.Snapshot.LightingProps
+    P.GlobalShadows           = L.GlobalShadows
+    P.Brightness              = L.Brightness
+    P.ClockTime               = L.ClockTime
+    P.Ambient                 = L.Ambient
+    P.OutdoorAmbient          = L.OutdoorAmbient
+    P.EnvironmentDiffuseScale = L.EnvironmentDiffuseScale
+    P.EnvironmentSpecularScale= L.EnvironmentSpecularScale
+    P.FogStart                = L.FogStart
+    P.FogEnd                  = L.FogEnd
+    P.FogColor                = L.FogColor
 end
 
 --[[
@@ -701,14 +721,14 @@ local function applyLowLighting()
             -- Gray Sky mode: Overrides FullBright's settings.
             -- Simple, solid gray.
             local color = Color3.fromRGB(128, 128, 128) -- Hardcoded gray
-            -- L.Brightness = 1 -- REMOVED: This caused the "blinding white"
+            L.Brightness = 1 -- Reset brightness to default
             L.ClockTime = 12
             L.Ambient = color
             L.OutdoorAmbient = color
 
             -- Remove skybox
             for _, child in ipairs(L:GetChildren()) do
-                if child:IsA("Sky") then
+                if child:IsA("Sky") or child:IsA("Clouds") then -- Also remove clouds
                     if not table.find(Variables.Snapshot.Skyboxes, child) then
                         table.insert(Variables.Snapshot.Skyboxes, child)
                     end
@@ -735,11 +755,6 @@ local function applyRemoveFog()
     end)
 end
 
---[[
-    FIX (APPLIED):
-    'scheduleApplyLighting' now restores all relevant lighting properties
-    if GraySky/FullBright are toggled off.
-]]
 local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
@@ -832,26 +847,21 @@ end
 ----------------------------------------------------------------------
 -- Viewport / VideoFrames and GUI hide/show
 ----------------------------------------------------------------------
-local function scanViewportAndVideo()
-    local function scan(rootGui)
-        if not rootGui then return end
-        eachDescendantChunked(rootGui,
-            function(inst) return inst:IsA("ViewportFrame") or inst:IsA("VideoFrame") end,
-            function(frame)
-                if frame:IsA("ViewportFrame") and Variables.Config.DisableViewportFrames then
-                    storeOnce(Variables.Snapshot.ViewportVisible, frame, frame.Visible)
-                    pcall(function() frame.Visible = false end)
-                elseif frame:IsA("VideoFrame") and Variables.Config.DisableVideoFrames then
-                    storeOnce(Variables.Snapshot.VideoPlaying, frame, frame.Playing)
-                    pcall(function() frame.Playing = false end)
-                end
-            end
-        )
-    end
+local function hideViewport(frame)
+    if not frame or not frame:IsA("ViewportFrame") then return end
+    storeOnce(Variables.Snapshot.ViewportVisible, frame, frame.Visible)
+    pcall(function() frame.Visible = false end)
+end
 
-    local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    scan(pg)
-    scan(RbxService.CoreGui)
+local function hideVideo(frame)
+    if not frame or not frame:IsA("VideoFrame") then return end
+    storeOnce(Variables.Snapshot.VideoPlaying, frame, frame.Playing)
+    pcall(function() frame.Playing = false end)
+end
+
+local function scanViewportAndVideo()
+    eachDescendantChunked(game, function(inst) return inst:IsA("ViewportFrame") end, hideViewport)
+    eachDescendantChunked(game, function(inst) return inst:IsA("VideoFrame") end, hideVideo)
 end
 
 local function restoreViewportAndVideo()
@@ -867,14 +877,18 @@ local function restoreViewportAndVideo()
     end
 end
 
+local function hidePlayerGui(gui)
+    if gui:IsA("ScreenGui") then
+        storeOnce(Variables.Snapshot.PlayerGuiEnabled, gui, gui.Enabled)
+        pcall(function() gui.Enabled = false end)
+    end
+end
+
 local function hidePlayerGuiAll()
     local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if not pg then return end
     for _, gui in ipairs(pg:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            storeOnce(Variables.Snapshot.PlayerGuiEnabled, gui, gui.Enabled)
-            pcall(function() gui.Enabled = false end)
-        end
+        hidePlayerGui(gui)
     end
 end
 
@@ -1070,93 +1084,121 @@ local function removeWaterReplacement()
 end
 
 ----------------------------------------------------------------------
--- Watchers (workspace/gui/lighting) with transition guards (CHANGED)
+-- Watchers (NEW: V2.lua / AFK script logic)
 ----------------------------------------------------------------------
-local function buildWatchers()
-    Variables.Maids.Watchers:DoCleaning()
-
-    local myTransition = Variables.Runtime.transitionId -- guard
-
-    -- Workspace: emitters, parts, constraints, animators, sounds, textures
-    Variables.Maids.Watchers:GiveTask(RbxService.Workspace.DescendantAdded:Connect(function(inst)
-        if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
-
-        if Variables.Config.DestroyEmitters and isEmitter(inst) then
-            destroyEmitterIrreversible(inst)
-        elseif Variables.Config.StopParticleSystems and isEmitter(inst) then
-            stopEmitter(inst)
+-- This function is called by the watchers and by the initial ApplyBatch
+local function ApplyToInstance(inst)
+    if not inst then return end
+    
+    -- Sky/Clouds (runs if GraySky OR RemoveSkybox is on)
+    if (Variables.Config.GraySky or Variables.Config.RemoveSkybox) and (inst:IsA("Sky") or inst:IsA("Clouds")) then
+        if not table.find(Variables.Snapshot.Skyboxes, inst) then
+            table.insert(Variables.Snapshot.Skyboxes, inst)
         end
-
-        if Variables.Config.NukeTextures then
-            nukeTexturesIrreversible(inst)
-        elseif Variables.Config.HideDecals and (inst:IsA("Decal") or inst:IsA("Texture")) then
-            hideDecalOrTexture(inst)
-        end
-
-        if Variables.Config.SmoothPlasticEverywhere and inst:IsA("BasePart") then
-            smoothPlasticPart(inst)
-        end
-
-        if Variables.Config.FreezeWorldAssemblies and inst:IsA("BasePart") then
-            freezeWorldPart(inst)
-        end
-
-        if Variables.Config.RemoveLocalNetworkOwnership and inst:IsA("BasePart") then
-            pcall(function() if not inst.Anchored then inst:SetNetworkOwner(nil) end end)
-        end
-
-        if Variables.Config.MuteAllSounds and inst:IsA("Sound") then guardSound(inst) end
-        if inst:IsA("Animator") then guardAnimator(inst) end
-    end))
-
-    -- PlayerGui & CoreGui
-    local function guiStream(root)
-        if not root then return end
-        Variables.Maids.Watchers:GiveTask(root.DescendantAdded:Connect(function(inst)
-            if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
-
-            if Variables.Config.DisableViewportFrames and inst:IsA("ViewportFrame") then
-                storeOnce(Variables.Snapshot.ViewportVisible, inst, inst.Visible)
-                pcall(function() inst.Visible = false end)
-            elseif Variables.Config.DisableVideoFrames and inst:IsA("VideoFrame") then
-                storeOnce(Variables.Snapshot.VideoPlaying, inst, inst.Playing)
-                pcall(function() inst.Playing = false end)
-            end
-
-            if Variables.Config.NukeTextures and (inst:IsA("ImageLabel") or inst:IsA("ImageButton")) then
-                pcall(function() inst.Image = "" end)
-            end
-
-            if Variables.Config.MuteAllSounds and inst:IsA("Sound") then guardSound(inst) end
-            if inst:IsA("Animator") then guardAnimator(inst) end
-        end))
+        inst.Parent = nil
+        return -- It's gone, no need to check other things
     end
 
+    -- PostFX
+    if Variables.Config.DisablePostEffects and (inst:IsA("BlurEffect") or inst:IsA("SunRaysEffect")
+        or inst:IsA("ColorCorrectionEffect") or inst:IsA("BloomEffect")
+        or inst:IsA("DepthOfFieldEffect")) then
+        storeOnce(Variables.Snapshot.PostEffects, inst, inst.Enabled)
+        pcall(function() inst.Enabled = false end)
+    end
+    
+    -- Emitters
+    if Variables.Config.DestroyEmitters and isEmitter(inst) then
+        destroyEmitterIrreversible(inst)
+        return
+    elseif Variables.Config.StopParticleSystems and isEmitter(inst) then
+        stopEmitter(inst)
+    end
+
+    -- Textures / Materials
+    if Variables.Config.NukeTextures then
+        nukeTexturesIrreversible(inst)
+    elseif Variables.Config.HideDecals and (inst:IsA("Decal") or inst:IsA("Texture")) then
+        hideDecalOrTexture(inst)
+    end
+
+    if Variables.Config.SmoothPlasticEverywhere and inst:IsA("BasePart") then
+        smoothPlasticPart(inst)
+    end
+
+    -- Physics
+    if Variables.Config.FreezeWorldAssemblies and inst:IsA("BasePart") then
+        freezeWorldPart(inst)
+    end
+
+    if Variables.Config.RemoveLocalNetworkOwnership and inst:IsA("BasePart") then
+        pcall(function() if not inst.Anchored then inst:SetNetworkOwner(nil) end end)
+    end
+
+    if Variables.Config.DisableConstraints then
+        disableConstraint(inst)
+    end
+
+    -- Sounds
+    if Variables.Config.MuteAllSounds and inst:IsA("Sound") then 
+        guardSound(inst)
+    end
+
+    -- Animators
+    if (Variables.Config.PauseCharacterAnimations or Variables.Config.PauseAllAnimations) and inst:IsA("Animator") then
+        guardAnimator(inst)
+    end
+
+    -- GUI
+    if Variables.Config.DisableViewportFrames and inst:IsA("ViewportFrame") then
+        hideViewport(inst)
+    end
+    if Variables.Config.DisableVideoFrames and inst:IsA("VideoFrame") then
+        hideVideo(inst)
+    end
+    if Variables.Config.HidePlayerGui and inst:IsA("ScreenGui") then
+        local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if pg and inst.Parent == pg then
+            hidePlayerGui(inst)
+        end
+    end
+end
+
+-- NEW: A batch function to run on Start, based on V2.lua
+local function ApplyBatch()
+    eachDescendantChunked(RbxService.Workspace, function() return true end, ApplyToInstance)
+    eachDescendantChunked(RbxService.Lighting, function() return true end, ApplyToInstance)
+    eachDescendantChunked(RbxService.SoundService, function() return true end, ApplyToInstance)
+
     local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    guiStream(pg)
-    guiStream(RbxService.CoreGui)
+    if pg then
+        eachDescendantChunked(pg, function() return true end, ApplyToInstance)
+    end
+end
+
+-- NEW: Rebuilt watchers based on V2.lua
+local function buildWatchers()
+    Variables.Maids.Watchers:DoCleaning()
+    local myTransition = Variables.Runtime.transitionId -- guard
+
+    local function OnDescendantAdded(inst)
+         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
+         ApplyToInstance(inst)
+    end
+
+    -- Workspace: emitters, parts, constraints, animators, sounds, textures
+    Variables.Maids.Watchers:GiveTask(RbxService.Workspace.DescendantAdded:Connect(OnDescendantAdded))
+    Variables.Maids.Watchers:GiveTask(RbxService.Lighting.DescendantAdded:Connect(OnDescendantAdded))
+    Variables.Maids.Watchers:GiveTask(RbxService.SoundService.DescendantAdded:Connect(OnDescendantAdded))
+
+    -- PlayerGui & CoreGui
+    local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if pg then
+        Variables.Maids.Watchers:GiveTask(pg.DescendantAdded:Connect(OnDescendantAdded))
+    end
+    Variables.Maids.Watchers:GiveTask(RbxService.CoreGui.DescendantAdded:Connect(OnDescendantAdded))
 
     -- Lighting stabilization
-    Variables.Maids.Watchers:GiveTask(RbxService.Lighting.ChildAdded:Connect(function(child)
-        if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
-        
-        -- Handle RemoveSkybox
-        if (Variables.Config.RemoveSkybox or Variables.Config.GraySky) and child:IsA("Sky") then
-            pcall(function() child:Destroy() end) -- Destroy, don't snapshot, as it was added *after* start
-        end
-
-        if Variables.Config.DisablePostEffects and (
-            child:IsA("BlurEffect") or child:IsA("SunRaysEffect") or
-            child:IsA("ColorCorrectionEffect") or child:IsA("BloomEffect") or
-            child:IsA("DepthOfFieldEffect")
-        ) then
-            storeOnce(Variables.Snapshot.PostEffects, child, child.Enabled)
-            pcall(function() child.Enabled = false end)
-        end
-
-        scheduleApplyLighting()
-    end))
-
     Variables.Maids.Watchers:GiveTask(RbxService.Lighting.Changed:Connect(function()
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
         scheduleApplyLighting()
@@ -1184,92 +1226,20 @@ local function applyAll()
         setFpsCap(Variables.Config.TargetFramesPerSecond)
     end
 
-    if Variables.Config.HidePlayerGui then hidePlayerGuiAll() end
     if Variables.Config.HideCoreGui  then hideCoreGuiAll(true) end
 
-    if Variables.Config.DisableViewportFrames or Variables.Config.DisableVideoFrames then
-        scanViewportAndVideo()
-    end
+    -- NEW: Run the V2.lua-style batch process
+    ApplyBatch()
 
-    if Variables.Config.MuteAllSounds then applyMuteAllSounds() end
-
-    -- 'tk' system removed
-    eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator)
-    if Variables.Config.PauseCharacterAnimations then toggleCharacterAnimateScripts(false) end
-
-    if Variables.Config.FreezeWorldAssemblies then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, freezeWorldPart)
-    end
-
-    if Variables.Config.DisableConstraints then disableWorldConstraints() end
+    -- These are still needed for non-descendant properties
     if Variables.Config.AnchorCharacter   then anchorCharacter(true) end
-
-    reduceSimulationRadius()
-    removeNetOwnership()
-
-    if Variables.Config.StopParticleSystems then
-        eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter)
-    end
-
-    if Variables.Config.DestroyEmitters and not Variables.Irreversible.EmittersDestroyed then
-        eachDescendantChunked(RbxService.Workspace, isEmitter, destroyEmitterIrreversible)
-        Variables.Irreversible.EmittersDestroyed = true
-    end
-
-    if Variables.Config.SmoothPlasticEverywhere then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart)
-    end
-
-    if Variables.Config.HideDecals then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture)
-    end
-
-    if Variables.Config.NukeTextures and not Variables.Irreversible.TexturesNuked then
-        pcall(function()
-            if RbxService.MaterialService then
-                RbxService.MaterialService.FallbackMaterial = Enum.Material.SmoothPlastic
-                if typeof(RbxService.MaterialService.Use2022Materials) == "boolean" then
-                    RbxService.MaterialService.Use2022Materials = false
-                end
-                -- Destroy all custom variants
-                for _, variant in ipairs(RbxService.MaterialService:GetChildren()) do
-                    if variant:IsA("MaterialVariant") then
-                        pcall(function() variant:Destroy() end)
-                    end
-                end
-            end
-        end)
-        
-        eachDescendantChunked(RbxService.Workspace, function(inst)
-            return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
-                or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
-                or inst:IsA("Pants") or inst:IsA("ShirtGraphic") or inst:IsA("BasePart")
-        end, nukeTexturesIrreversible)
-
-        eachDescendantChunked(game, function(inst)
-            return inst:IsA("ImageLabel") or inst:IsA("ImageButton")
-        end, nukeTexturesIrreversible)
-
-        Variables.Irreversible.TexturesNuked = true
-    end
-
+    if Variables.Config.ReduceSimulationRadius then reduceSimulationRadius() end
     if Variables.Config.RemoveGrassDecoration then terrainDecorationSet(true) end
-    if Variables.Config.DisablePostEffects   then disablePostEffects() end
-
-    -- Apply Skybox removal
-    if Variables.Config.RemoveSkybox then
-        for _, child in ipairs(RbxService.Lighting:GetChildren()) do
-            if child:IsA("Sky") then
-                table.insert(Variables.Snapshot.Skyboxes, child)
-                child.Parent = nil
-            end
-        end
-    end
-
-    scheduleApplyLighting()
-
     if Variables.Config.UseMinimumQuality then applyQualityMinimum() end
     if Variables.Config.ReplaceWaterWithBlock then applyWaterReplacement() end
+    
+    -- Schedule lighting *after* batch
+    scheduleApplyLighting()
 
     -- Only build watchers if this transition is still current
     buildWatchers()
@@ -1285,7 +1255,6 @@ local function restoreAll()
     -- ALWAYS restore (fixes spam-toggle wedge)
     pcall(function() RbxService.RunService:Set3dRenderingEnabled(true) end)
 
-    -- 'tk' system removed
     restoreViewportAndVideo()
     restoreSounds()
     releaseAnimatorGuards()
@@ -1373,12 +1342,6 @@ local function requestEnabled(desired)
                 Variables.Runtime.transitionId += 1
                 local want = Variables.Runtime.desiredEnabled
                 
-                --[[
-                    FIX (VERIFIED):
-                    Reset 'cancelRequested' to false *inside* the loop.
-                    This ensures the new sweep (apply or restore) is
-                    allowed to run without cancelling itself.
-                ]]
                 Variables.Runtime.cancelRequested = false
                 
                 if want then
@@ -1452,7 +1415,7 @@ group:AddDivider()
 group:AddLabel("Physics / Network")
 
 group:AddToggle("OptAnchorChar",     { Text="Anchor Character",                 Default=Variables.Config.AnchorCharacter })
-group:AddToggle("OptSimRadius",      { Text="Reduce Simulation Radius",         Default=Variables.Config.ReduceSimulationRadius })
+group:AddAddToggle("OptSimRadius",      { Text="Reduce Simulation Radius",         Default=Variables.Config.ReduceSimulationRadius })
 group:AddToggle("OptNoNet",          { Text="Remove Local Network Ownership",   Default=Variables.Config.RemoveLocalNetworkOwnership })
 
 group:AddDivider()
@@ -1525,7 +1488,10 @@ end)
 
 bindToggle("OptHidePlayerGui", function(v)
     Variables.Config.HidePlayerGui = v
-    if Variables.Config.Enabled then if v then hidePlayerGuiAll() else restorePlayerGuiAll() end end
+    if Variables.Config.Enabled then
+        if v then hidePlayerGuiAll() else restorePlayerGuiAll() end
+        buildWatchers() -- Re-arm watcher
+    end
 end)
 
 bindToggle("OptHideCoreGui", function(v)
@@ -1593,6 +1559,7 @@ bindToggle("OptNoConstraints", function(v)
     Variables.Config.DisableConstraints = v
     if Variables.Config.Enabled then
         if v then disableWorldConstraints() else restoreWorldConstraints() end
+        buildWatchers()
     end
 end)
 
@@ -1703,17 +1670,21 @@ bindToggle("OptNoPostFX", function(v)
     end
 end)
 
+-- NEW: Helper function to restore skybox if BOTH sky toggles are off
+local function ConditionalRestoreSkybox()
+    if not Variables.Config.GraySky and not Variables.Config.RemoveSkybox then
+        for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
+            if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
+        end
+        Variables.Snapshot.Skyboxes = {}
+    end
+end
+
 bindToggle("OptGraySky", function(v)
     Variables.Config.GraySky = v
     if Variables.Config.Enabled then
         if not v then
-            -- Restore sky if 'RemoveSkybox' is also off
-            if not Variables.Config.RemoveSkybox then
-                for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
-                    if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
-                end
-                Variables.Snapshot.Skyboxes = {}
-            end
+            ConditionalRestoreSkybox()
         end
         scheduleApplyLighting()
         buildWatchers()
@@ -1724,13 +1695,18 @@ end)
 
 bindToggle("OptFullBright", function(v)
     Variables.Config.FullBright = v
-    if Variables.Config.Enabled then scheduleApplyLighting(); buildWatchers() end
+    if Variables.Config.Enabled then 
+        scheduleApplyLighting()
+        buildWatchers() 
+    end
 end)
 
 bindOption("OptFullBrightLvl", function(v)
     v = math.floor(tonumber(v) or Variables.Config.FullBrightLevel)
     Variables.Config.FullBrightLevel = v
-    if Variables.Config.Enabled and Variables.Config.FullBright then scheduleApplyLighting() end
+    if Variables.Config.Enabled and Variables.Config.FullBright then 
+        scheduleApplyLighting() 
+    end
 end)
 
 bindToggle("OptNoFog", function(v)
@@ -1761,7 +1737,7 @@ bindToggle("OptNoSky", function(v)
             -- Apply: Find all current skyboxes, snapshot, and remove
             local currentSkies = {}
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
-                if child:IsA("Sky") then
+                if child:IsA("Sky") or child:IsA("Clouds") then
                     table.insert(currentSkies, child)
                 end
             end
@@ -1773,13 +1749,7 @@ bindToggle("OptNoSky", function(v)
             end
         else
             -- Restore: Put back the skyboxes we took
-            -- BUT: Don't restore if GraySky is still on
-            if not Variables.Config.GraySky then
-                for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
-                    if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
-                end
-                Variables.Snapshot.Skyboxes = {}
-            end
+            ConditionalRestoreSkybox()
         end
         buildWatchers() -- Re-arm the childadded watcher
     end
