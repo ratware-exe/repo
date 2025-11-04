@@ -75,7 +75,19 @@ do
 			pcall(function() LocalPlayer.CharacterAppearanceId = Variables.Backup.CharacterAppearanceId end)
 		end
 
-		-- === Original replace functions (preserved) =========================
+		-- When FakeDisplayName is empty, Roblox UI often falls back to showing username.
+		-- Scrub that fallback by removing the *current* FakeName from text.
+		local function blankDisplayFallback(s)
+			if Variables.Config.FakeDisplayName == "" then
+				local fn = tostring(Variables.Config.FakeName or "")
+				if fn ~= "" then
+					return (tostring(s or "")):gsub(esc(fn), "")
+				end
+			end
+			return s
+		end
+
+		-- === Original replace functions (preserved + fallback handling) =====
 		local function replaceTextInObject(obj)
 			if not obj or not obj.Parent then return end
 			if not Variables.Backup then return end
@@ -89,12 +101,20 @@ do
 				end
 
 				local text = tostring(obj.Text or "")
+				-- Original independent branches
 				if string.find(text, Variables.Backup.Name, 1, true) then
-					obj.Text = (text:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
+					text = (text:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 				elseif string.find(text, Variables.Backup.DisplayName, 1, true) then
-					obj.Text = (text:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
+					text = (text:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 				elseif string.find(text, tostring(Variables.Backup.UserId), 1, true) then
-					obj.Text = (text:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
+					text = (text:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
+				end
+
+				-- Handle display-name-empty fallback (username shows instead)
+				text = blankDisplayFallback(text)
+
+				if text ~= obj.Text then
+					pcall(function() obj.Text = text end)
 				end
 
 				local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
@@ -102,18 +122,27 @@ do
 					if not Variables.RunFlag or not Variables.Backup then return end
 					local newText = tostring(obj.Text or "")
 
+					-- If new text contains originals, refresh baseline snapshot
 					if string.find(newText, Variables.Backup.Name, 1, true)
 					or string.find(newText, Variables.Backup.DisplayName, 1, true)
 					or string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
 						Variables.Snapshots.Text[obj] = newText
 					end
 
+					-- Re-apply spoof (same rules)
 					if string.find(newText, Variables.Backup.Name, 1, true) then
-						obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
+						newText = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 					elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
-						obj.Text = (newText:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
+						newText = (newText:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 					elseif string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
-						obj.Text = (newText:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
+						newText = (newText:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
+					end
+
+					-- Scrub username fallback if DisplayName is empty
+					newText = blankDisplayFallback(newText)
+
+					if newText ~= obj.Text then
+						pcall(function() obj.Text = newText end)
 					end
 				end)
 				Variables.Maids.NameSpoofer:GiveTask(conn)
@@ -210,11 +239,17 @@ do
 					if obj and obj.Parent and Variables.Backup then
 						local t = base
 						if string.find(t, Variables.Backup.Name, 1, true) then
-							obj.Text = (t:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
+							t = (t:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 						elseif string.find(t, Variables.Backup.DisplayName, 1, true) then
-							obj.Text = (t:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
+							t = (t:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 						elseif string.find(t, tostring(Variables.Backup.UserId), 1, true) then
-							obj.Text = (t:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
+							t = (t:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
+						end
+						-- Scrub username fallback if DisplayName is empty
+						t = blankDisplayFallback(t)
+
+						if t ~= obj.Text then
+							pcall(function() obj.Text = t end)
 						end
 					end
 				end
