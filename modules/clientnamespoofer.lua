@@ -1,13 +1,15 @@
 -- modules/clientnamespoofer.lua
--- Ports ClientNameSpoofer.lua into the repo's module pattern and Obsidian UI.
--- Requires: dependency/Services.lua, dependency/Maid.lua, dependency/Signal.lua
--- Tabs.Misc groupbox with Inputs + Toggle + Apply/Reset buttons.
+-- ClientNameSpoofer rebuilt to match repo style:
+-- - Master Toggle in Misc (no Apply/Reset buttons)
+-- - Reversible via Maid + snapshots
+-- - Follows factory pattern and Stop() cleanup like other modules
 
 do
     return function(UI)
-        -- === Imports & shared env ===========================================
+        -- ========== Imports / Shared Env ===================================
         local GlobalEnv = (getgenv and getgenv()) or _G
         local RepoBase  = GlobalEnv.RepoBase or ""
+
         local function Import(path)
             local src = game:HttpGet(RepoBase .. path)
             local chunk, err = loadstring(src, "@" .. path)
@@ -17,246 +19,313 @@ do
             return result
         end
 
-        local S        = Import("dependency/Services.lua")   -- services map
+        local S        = Import("dependency/Services.lua")
         local Maid     = Import("dependency/Maid.lua")
+
         local Players  = S.Players
         local CoreGui  = S.CoreGui
 
         local Library, Tabs, Options, Toggles = UI.Library, UI.Tabs, UI.Options, UI.Toggles
-
-        -- === Config / State =================================================
         local lp = Players.LocalPlayer
 
-        -- Namespaced config so we don't collide with other modules that also use "Config"
-        GlobalEnv.NameSpoofConfig = GlobalEnv.NameSpoofConfig or {
-            FakeDisplayName     = "NameSpoof",
-            FakeName            = "NameSpoof",
-            FakeId              = 0,
-            BlankProfilePicture = true,
+        -- ========== Variables / State ======================================
+        local Variables = {
+            Maid = Maid.new(),
+            Enabled = false,
+
+            -- Weak maps so destroyed instances auto-GC
+            Snapshots = {
+                Text  = setmetatable({}, { __mode = "k" }),
+                Image = setmetatable({}, { __mode = "k" }),
+                Player = nil,
+                Guard  = setmetatable({}, { __mode = "k" }), -- reentrancy guard per-instance
+            },
+
+            Config = {
+                FakeDisplayName     = "NameSpoof",
+                FakeName            = "NameSpoof",
+                FakeId              = 0,
+                BlankProfilePicture = true,
+            },
         }
-        local Config = GlobalEnv.NameSpoofConfig
 
-        -- Keep originals for restore across reloads
-        GlobalEnv.NameSpoofOriginal = GlobalEnv.NameSpoofOriginal or {
-            Name        = lp.Name,
-            DisplayName = lp.DisplayName,
-            UserId      = lp.UserId,
-        }
-        local Original = GlobalEnv.NameSpoofOriginal
+        -- Allow cross-module/session persistence if user wants it shared
+        GlobalEnv.NameSpoofConfig = GlobalEnv.NameSpoofConfig or Variables.Config
+        Variables.Config = GlobalEnv.NameSpoofConfig
 
-        local maid = Maid.new()
-
-        -- Small helper to register connections/instances into our Maid
-        local function track(x)
-            if x then maid:GiveTask(x) end
-            return x
-        end
-
-        -- === Core spoofing logic (ported) ===================================
+        -- ========== Helpers =================================================
         local blankImageIds = {
             "rbxasset://textures/ui/GuiImagePlaceholder.png",
             "rbxassetid://0",
             "http://www.roblox.com/asset/?id=0",
         }
 
-        local function replaceTextInObject(obj)
-            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-                if obj:GetAttribute("TextReplaced") then return end
-                obj:SetAttribute("TextReplaced", true)
-
-                local text = obj.Text
-                if string.find(text, Original.Name) then
-                    obj.Text = string.gsub(text, Original.Name, Config.FakeName)
-                elseif string.find(text, Original.DisplayName) then
-                    obj.Text = string.gsub(text, Original.DisplayName, Config.FakeDisplayName)
-                elseif string.find(text, tostring(Original.UserId)) then
-                    obj.Text = string.gsub(text, tostring(Original.UserId), tostring(Config.FakeId))
-                end
-
-                track(obj:GetPropertyChangedSignal("Text"):Connect(function()
-                    task.wait()
-                    local newText = obj.Text
-                    if string.find(newText, Original.Name) then
-                        obj.Text = string.gsub(newText, Original.Name, Config.FakeName)
-                    elseif string.find(newText, Original.DisplayName) then
-                        obj.Text = string.gsub(newText, Original.DisplayName, Config.FakeDisplayName)
-                    elseif string.find(newText, tostring(Original.UserId)) then
-                        obj.Text = string.gsub(newText, tostring(Original.UserId), tostring(Config.FakeId))
-                    end
-                end))
-            end
-        end
-
-        local function replaceImageInObject(obj)
-            if Config.BlankProfilePicture and (obj:IsA("ImageLabel") or obj:IsA("ImageButton")) then
-                if obj:GetAttribute("ImageReplaced") then return end
-                obj:SetAttribute("ImageReplaced", true)
-
-                local image = obj.Image
-                if string.find(image or "", tostring(Original.UserId)) or string.find(image or "", Original.Name) then
-                    obj.Image = blankImageIds[1]
-                end
-
-                track(obj:GetPropertyChangedSignal("Image"):Connect(function()
-                    task.wait()
-                    local newImage = obj.Image
-                    if string.find(newImage or "", tostring(Original.UserId)) or string.find(newImage or "", Original.Name) then
-                        obj.Image = blankImageIds[1]
-                    end
-                end))
-            end
-        end
-
-        local function scan(container)
-            for _, obj in ipairs(container:GetDescendants()) do
-                if obj:GetAttribute("TextReplaced") then obj:SetAttribute("TextReplaced", nil) end
-                if obj:GetAttribute("ImageReplaced") then obj:SetAttribute("ImageReplaced", nil) end
-                replaceTextInObject(obj)
-                replaceImageInObject(obj)
-            end
-        end
-
-        local function setupGlobalHook()
-            scan(game)
-            track(game.DescendantAdded:Connect(function(obj)
-                replaceTextInObject(obj)
-                replaceImageInObject(obj)
-            end))
-        end
-
-        local function hookPlayerList()
-            local playerList = CoreGui:FindFirstChild("PlayerList")
-            if not playerList then return end
-            scan(playerList)
-            track(playerList.DescendantAdded:Connect(function(obj)
-                replaceTextInObject(obj)
-                replaceImageInObject(obj)
-            end))
-        end
-
-        local function hookCoreGui()
-            scan(CoreGui)
-            track(CoreGui.DescendantAdded:Connect(function(obj)
-                replaceTextInObject(obj)
-                replaceImageInObject(obj)
-            end))
-        end
-
         local function killOldStandaloneUi()
-            -- If the old standalone "NameSpoofUI" exists from the original script, remove it.
             local old = CoreGui:FindFirstChild("NameSpoofUI")
             if old then old:Destroy() end
         end
 
-        local function applyPlayerFields()
-            -- These may be protected in some environments; wrap in pcall.
-            pcall(function() lp.DisplayName = Config.FakeDisplayName end)
-            pcall(function() lp.CharacterAppearanceId = tonumber(Config.FakeId) or Config.FakeId end)
+        local function snapshotPlayer()
+            Variables.Snapshots.Player = Variables.Snapshots.Player or {
+                DisplayName = lp.DisplayName,
+                UserId      = lp.UserId,
+                -- CharacterAppearanceId is mirrored to UserId locally in most cases
+                CharacterAppearanceId = pcall(function() return lp.CharacterAppearanceId end) and lp.CharacterAppearanceId or lp.UserId,
+            }
         end
 
+        local function restorePlayer()
+            local P = Variables.Snapshots.Player
+            if not P then return end
+            pcall(function() lp.DisplayName = P.DisplayName end)
+            pcall(function() lp.CharacterAppearanceId = P.CharacterAppearanceId end)
+        end
+
+        local function safeSet(obj, prop, value)
+            local ok, err = pcall(function()
+                Variables.Snapshots.Guard[obj] = true
+                obj[prop] = value
+                Variables.Snapshots.Guard[obj] = nil
+            end)
+            if not ok then
+                -- swallow; some props may be protected
+            end
+        end
+
+        local function shouldSkip(obj)
+            return obj == nil or obj.Parent == nil
+        end
+
+        local function transformText(text)
+            if not text or text == "" then return text end
+            local cfg, snapP = Variables.Config, Variables.Snapshots.Player
+            if not snapP then return text end
+
+            -- Replace any occurrence of originals with fakes
+            local out = text
+            out = out:gsub(snapP.DisplayName, cfg.FakeDisplayName)
+            out = out:gsub(lp.Name,        cfg.FakeName)
+            out = out:gsub(tostring(snapP.UserId), tostring(cfg.FakeId))
+            return out
+        end
+
+        local function transformImage(image)
+            if not image or image == "" then return image end
+            local snapP = Variables.Snapshots.Player
+            if not snapP then return image end
+            if Variables.Config.BlankProfilePicture then
+                if image:find(tostring(snapP.UserId)) or image:find(lp.Name) then
+                    return blankImageIds[1]
+                end
+            end
+            return image
+        end
+
+        local function snapshotIfNeeded(obj)
+            local Snap = Variables.Snapshots
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                if Snap.Text[obj] == nil then
+                    Snap.Text[obj] = obj.Text
+                end
+            elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+                if Snap.Image[obj] == nil then
+                    Snap.Image[obj] = obj.Image
+                end
+            end
+        end
+
+        local function applyToObj(obj)
+            if shouldSkip(obj) then return end
+            local Snap = Variables.Snapshots
+
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                snapshotIfNeeded(obj)
+                local newText = transformText(obj.Text)
+                if newText ~= obj.Text then
+                    safeSet(obj, "Text", newText)
+                end
+
+                -- live guard: rewrite on future changes only while enabled
+                local conn
+                conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
+                    if not Variables.Enabled then return end
+                    if Snap.Guard[obj] then return end
+                    local wanted = transformText(obj.Text)
+                    if wanted ~= obj.Text then
+                        safeSet(obj, "Text", wanted)
+                    end
+                end)
+                Variables.Maid:GiveTask(conn)
+
+            elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+                snapshotIfNeeded(obj)
+                local newImg = transformImage(obj.Image)
+                if newImg ~= obj.Image then
+                    safeSet(obj, "Image", newImg)
+                end
+
+                local conn
+                conn = obj:GetPropertyChangedSignal("Image"):Connect(function()
+                    if not Variables.Enabled then return end
+                    if Snap.Guard[obj] then return end
+                    local wanted = transformImage(obj.Image)
+                    if wanted ~= obj.Image then
+                        safeSet(obj, "Image", wanted)
+                    end
+                end)
+                Variables.Maid:GiveTask(conn)
+            end
+        end
+
+        local function scan(root)
+            for _, obj in ipairs(root:GetDescendants()) do
+                applyToObj(obj)
+            end
+        end
+
+        local function connectAdded(root)
+            local conn = root.DescendantAdded:Connect(function(obj)
+                if Variables.Enabled then
+                    applyToObj(obj)
+                end
+            end)
+            Variables.Maid:GiveTask(conn)
+        end
+
+        local function reapplyActive()
+            if not Variables.Enabled then return end
+            scan(game)
+        end
+
+        -- ========== Lifecycle ==============================================
         local function Start()
-            maid:DoCleaning()                -- full cleanup before applying
+            if Variables.Enabled then
+                -- Reapply with latest config without tearing down all watchers
+                reapplyActive()
+                -- ensure player fields set
+                pcall(function() lp.DisplayName = Variables.Config.FakeDisplayName end)
+                pcall(function() lp.CharacterAppearanceId = tonumber(Variables.Config.FakeId) or Variables.Config.FakeId end)
+                return
+            end
+
+            Variables.Enabled = true
+            Variables.Maid:DoCleaning() -- clear any stale watchers
+
             killOldStandaloneUi()
-            setupGlobalHook()
-            hookPlayerList()
-            hookCoreGui()
-            applyPlayerFields()
+            snapshotPlayer()
+
+            -- initial pass
+            scan(game)
+
+            -- player fields
+            pcall(function() lp.DisplayName = Variables.Config.FakeDisplayName end)
+            pcall(function() lp.CharacterAppearanceId = tonumber(Variables.Config.FakeId) or Variables.Config.FakeId end)
+
+            -- live hooks while enabled
+            connectAdded(game)
+            connectAdded(CoreGui)
+
             if Library and Library.Notify then
-                Library:Notify("Name spoof applied.", 3)
+                Library:Notify("Client Name Spoofer enabled.", 3)
             end
         end
 
-        local function Restore()
-            -- Best-effort revert of player-facing fields and remove hooks.
-            maid:DoCleaning()
-            pcall(function() lp.DisplayName = Original.DisplayName end)
-            pcall(function() lp.CharacterAppearanceId = Original.UserId end)
+        local function Stop()
+            if not Variables.Enabled then return end
+            Variables.Enabled = false
+
+            -- disconnect all watchers and timers
+            Variables.Maid:DoCleaning()
+
+            -- restore objects to original snapshots
+            for obj, txt in pairs(Variables.Snapshots.Text) do
+                if obj and obj.Parent then
+                    safeSet(obj, "Text", txt)
+                end
+            end
+            for obj, img in pairs(Variables.Snapshots.Image) do
+                if obj and obj.Parent then
+                    safeSet(obj, "Image", img)
+                end
+            end
+
+            -- restore player fields
+            restorePlayer()
+
+            -- clear per-run snapshots (keep Player snapshot so a re-enable toggles back cleanly)
+            Variables.Snapshots.Text  = setmetatable({}, { __mode = "k" })
+            Variables.Snapshots.Image = setmetatable({}, { __mode = "k" })
+            Variables.Snapshots.Guard = setmetatable({}, { __mode = "k" })
+
             if Library and Library.Notify then
-                Library:Notify("Name spoof reset.", 3)
+                Library:Notify("Client Name Spoofer disabled and restored.", 3)
             end
         end
 
-        -- === Obsidian UI (Misc tab → groupbox) ==============================
-        -- Per Obsidian docs: Groupbox:AddInput(id, {Text, Default, Numeric, Finished, Placeholder, Callback, ...})
-        -- and Groupbox:AddToggle(id, {Text, Default, Callback, ...}). :contentReference[oaicite:2]{index=2}
-        local MiscTab = (Tabs and (Tabs.Misc or Tabs["Misc"])) or (Tabs and Tabs.Settings) or UI.ActiveTab or nil
-        if not MiscTab then error("[ClientNameSpoofer] Could not find a suitable tab to attach UI.") end
+        -- ========== Obsidian UI (Misc) =====================================
+        local MiscTab = (Tabs and (Tabs.Misc or Tabs["Misc"])) or (Tabs and Tabs.Settings) or UI.ActiveTab
+        if not MiscTab then
+            warn("[ClientNameSpoofer] No suitable tab; UI will not render.")
+        else
+            local Box = MiscTab:AddLeftGroupbox("Client Name Spoofer")
 
-        local Box = MiscTab:AddLeftGroupbox("Client Name Spoofer")
+            Box:AddInput("CNS_DisplayName", {
+                Text = "Fake Display Name",
+                Default = tostring(Variables.Config.FakeDisplayName or ""),
+                Finished = true,
+                Placeholder = "Display name...",
+            }):OnChanged(function(v)
+                Variables.Config.FakeDisplayName = v
+                reapplyActive()
+            end)
 
-        Box:AddInput("Spoof_DisplayName", {
-            Text = "Fake Display Name",
-            Default = tostring(Config.FakeDisplayName or ""),
-            Finished = true,
-            Placeholder = "Display name...",
-        })
+            Box:AddInput("CNS_Username", {
+                Text = "Fake Username",
+                Default = tostring(Variables.Config.FakeName or ""),
+                Finished = true,
+                Placeholder = "Username...",
+            }):OnChanged(function(v)
+                Variables.Config.FakeName = v
+                reapplyActive()
+            end)
 
-        Box:AddInput("Spoof_Username", {
-            Text = "Fake Username",
-            Default = tostring(Config.FakeName or ""),
-            Finished = true,
-            Placeholder = "Username...",
-        })
+            Box:AddInput("CNS_UserId", {
+                Text = "Fake UserId",
+                Default = tostring(Variables.Config.FakeId or 0),
+                Numeric = true,
+                Finished = true,
+                Placeholder = "123456",
+            }):OnChanged(function(v)
+                local n = tonumber(v)
+                if n then
+                    Variables.Config.FakeId = n
+                    reapplyActive()
+                end
+            end)
 
-        Box:AddInput("Spoof_UserId", {
-            Text = "Fake UserId",
-            Default = tostring(Config.FakeId or 0),
-            Numeric = true,
-            Finished = true,
-            Placeholder = "123456",
-        })
+            Box:AddToggle("CNS_BlankPfp", {
+                Text = "Blank Profile Picture",
+                Default = Variables.Config.BlankProfilePicture == true,
+            }):OnChanged(function(val)
+                Variables.Config.BlankProfilePicture = val and true or false
+                reapplyActive()
+            end)
 
-        local ToggleBlank = Box:AddToggle("Spoof_BlankPfp", {
-            Text = "Blank Profile Picture",
-            Default = Config.BlankProfilePicture == true,
-        })
+            Box:AddDivider()
 
-        Box:AddDivider()
-
-        Box:AddButton({
-            Text = "Apply Spoof",
-            Func = function()
-                -- Pull latest values from Obsidian registries
-                Config.FakeDisplayName     = (Options and Options.Spoof_DisplayName and Options.Spoof_DisplayName.Value) or Config.FakeDisplayName
-                Config.FakeName            = (Options and Options.Spoof_Username and Options.Spoof_Username.Value) or Config.FakeName
-                local rawId                = (Options and Options.Spoof_UserId and Options.Spoof_UserId.Value) or tostring(Config.FakeId)
-                Config.FakeId              = tonumber(rawId) or Config.FakeId
-                Config.BlankProfilePicture = (Toggles and Toggles.Spoof_BlankPfp and Toggles.Spoof_BlankPfp.Value) or false
-                Start()
-            end
-        })
-
-        Box:AddButton({
-            Text = "Reset / Unload",
-            Risky = true,
-            DoubleClick = true,
-            Func = function()
-                Restore()
-            end
-        })
-
-        -- Keep live in sync if user edits the inputs before pressing "Apply"
-        if Options and Options.Spoof_DisplayName then
-            Options.Spoof_DisplayName:OnChanged(function(v) Config.FakeDisplayName = v end)
-        end
-        if Options and Options.Spoof_Username then
-            Options.Spoof_Username:OnChanged(function(v) Config.FakeName = v end)
-        end
-        if Options and Options.Spoof_UserId then
-            Options.Spoof_UserId:OnChanged(function(v) Config.FakeId = tonumber(v) or Config.FakeId end)
-        end
-        if ToggleBlank and ToggleBlank.OnChanged then
-            ToggleBlank:OnChanged(function(v) Config.BlankProfilePicture = v end)
+            Box:AddToggle("CNS_Enable", {
+                Text = "Enable Name Spoofer",
+                Default = false,
+            }):OnChanged(function(val)
+                if val then Start() else Stop() end
+            end)
         end
 
-        -- === Module API =====================================================
+        -- ========== Module API =============================================
         local Module = { Name = "ClientNameSpoofer" }
         function Module.Stop()
-            Restore()
+            Stop()
         end
-
-        -- Optional: auto-apply once on mount (comment out if you prefer manual apply)
-        -- Start()
 
         return Module
     end
