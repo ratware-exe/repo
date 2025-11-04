@@ -687,9 +687,8 @@ end
 
 --[[
     FIX (APPLIED):
-    Separated GraySky and FullBright logic.
-    - GraySky: Sets ambient to 128 gray, time to 12, brightness to 1, and removes sky.
-    - FullBright: Sets brightness to slider, and ambient to 192 gray.
+    - GraySky: Sets ambient to 128 gray, time to 12, and removes sky. Does NOT touch brightness.
+    - FullBright: Sets brightness from slider, and ambient to 192 gray.
 ]]
 local function applyLowLighting()
     local L = RbxService.Lighting
@@ -702,7 +701,7 @@ local function applyLowLighting()
             -- Gray Sky mode: Overrides FullBright's settings.
             -- Simple, solid gray.
             local color = Color3.fromRGB(128, 128, 128) -- Hardcoded gray
-            L.Brightness = 1 -- Reset brightness to default
+            -- L.Brightness = 1 -- REMOVED: This caused the "blinding white"
             L.ClockTime = 12
             L.Ambient = color
             L.OutdoorAmbient = color
@@ -736,6 +735,11 @@ local function applyRemoveFog()
     end)
 end
 
+--[[
+    FIX (APPLIED):
+    'scheduleApplyLighting' now restores all relevant lighting properties
+    if GraySky/FullBright are toggled off.
+]]
 local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
@@ -1469,8 +1473,8 @@ group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=
 -- REMOVED: group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
 group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
 group:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
-group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) -- NEW
-group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox }) -- NEW
+group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog })
+group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox })
 group:AddToggle("OptMinQuality",     { Text="Use Minimum Quality",      Default=Variables.Config.UseMinimumQuality })
 group:AddToggle("OptClearBlurRestore",{ Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
 
