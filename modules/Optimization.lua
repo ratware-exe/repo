@@ -74,8 +74,8 @@ local Variables = {
         FullBright              = true,
         FullBrightLevel         = 2,      -- 0..5
         
-        RemoveFog               = false, 
-        RemoveSkybox            = false, 
+        RemoveFog               = false, -- NEW
+        RemoveSkybox            = false, -- NEW
 
         UseMinimumQuality       = true,
         ForceClearBlurOnRestore = true,
@@ -101,17 +101,16 @@ local Variables = {
 
         EmitterProps       = {},  -- [reversible stop] per type snapshot (see stopEmitter)
 
-        LightingProps      = { 
+        LightingProps      = { -- NEW: Added Fog properties
             FogStart = nil,
             FogEnd = nil,
-            FogColor = nil,
-            ColorShift_Top = nil -- NEW: Snapshot for Gray Sky
+            FogColor = nil
         },  -- saved lighting fields
         PostEffects        = {},  -- Effect -> Enabled
         TerrainDecoration  = nil, -- bool
         QualityLevel       = nil, -- Enum.QualityLevel
 
-        Skyboxes           = {}, -- To store removed skyboxes
+        Skyboxes           = {}, -- NEW: To store removed skyboxes
 
         TerrainWater = {          -- for Terrain mimic mode
             WaterTransparency= nil,
@@ -325,7 +324,7 @@ end
 local function isEmitter(inst)
     return inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
         or inst:IsA("Fire") or inst:IsA("Smoke")
-        or inst:IsA("Sparkles") 
+        or inst:IsA("Sparkles")
 end
 
 -- Reversible STOP
@@ -686,10 +685,14 @@ local function snapshotLighting()
         FogStart                = L.FogStart,
         FogEnd                  = L.FogEnd,
         FogColor                = L.FogColor,
-        ColorShift_Top          = L.ColorShift_Top -- GRAY SKY FIX
     }
 end
 
+--[[
+    FIX (APPLIED):
+    'applyLowLighting' now also removes the Skybox if 'GraySky' is on.
+    This ensures the gray ambient light is actually visible.
+]]
 local function applyLowLighting()
     local L = RbxService.Lighting
     pcall(function()
@@ -703,7 +706,16 @@ local function applyLowLighting()
             L.ClockTime = 12
             L.Ambient = color
             L.OutdoorAmbient = color
-            L.ColorShift_Top = color -- GRAY SKY FIX
+
+            -- NEW FIX: GraySky must also remove any existing skybox to be visible
+            for _, child in ipairs(L:GetChildren()) do
+                if child:IsA("Sky") then
+                    if not table.find(Variables.Snapshot.Skyboxes, child) then
+                        table.insert(Variables.Snapshot.Skyboxes, child)
+                    end
+                    child.Parent = nil
+                end
+            end
         end
     end)
 end
@@ -715,14 +727,37 @@ local function applyRemoveFog()
     end)
 end
 
+--[[
+    FIX (APPLIED):
+    'scheduleApplyLighting' now restores ambient light/brightness
+    if GraySky/FullBright are toggled off.
+]]
 local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
     task.defer(function()
+        -- Check master enabled flag first
         if Variables.Config.Enabled and not Variables.Runtime.cancelRequested then
             if (Variables.Config.GraySky or Variables.Config.FullBright) then
                 applyLowLighting()
+            else
+                -- Restore Ambient/OutdoorAmbient/ClockTime if GraySky/FullBright are both off
+                pcall(function()
+                    local P = Variables.Snapshot.LightingProps
+                    if P then
+                        local L = RbxService.Lighting
+                        if not Variables.Config.FullBright then
+                             L.Brightness = P.Brightness
+                        end
+                        if not Variables.Config.GraySky then
+                            L.Ambient = P.Ambient
+                            L.OutdoorAmbient = P.OutdoorAmbient
+                            L.ClockTime = P.ClockTime
+                        end
+                    end
+                end)
             end
+            
             if Variables.Config.RemoveFog then
                 applyRemoveFog()
             end
@@ -1101,8 +1136,9 @@ local function buildWatchers()
     Variables.Maids.Watchers:GiveTask(RbxService.Lighting.ChildAdded:Connect(function(child)
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
         
+        -- Handle RemoveSkybox
         if Variables.Config.RemoveSkybox and child:IsA("Sky") then
-            pcall(function() child:Destroy() end) 
+            pcall(function() child:Destroy() end) -- Destroy, don't snapshot, as it was added *after* start
         end
 
         if Variables.Config.DisablePostEffects and (
@@ -1216,6 +1252,7 @@ local function applyAll()
     if Variables.Config.RemoveGrassDecoration then terrainDecorationSet(true) end
     if Variables.Config.DisablePostEffects   then disablePostEffects() end
 
+    -- Apply Skybox removal
     if Variables.Config.RemoveSkybox then
         for _, child in ipairs(RbxService.Lighting:GetChildren()) do
             if child:IsA("Sky") then
@@ -1250,11 +1287,6 @@ local function restoreAll()
     releaseAnimatorGuards()
     toggleCharacterAnimateScripts(true)
 
-Two quick fixes.
-
-1) `Remove Skybox` doesn't restore the skybox
-2) `Remove Fog` doesn't restore the fog
-
     restoreAnchoredParts()
     restoreWorldConstraints()
     restoreCharacterAnchors()
@@ -1277,10 +1309,10 @@ Two quick fixes.
             L.OutdoorAmbient           = P.OutdoorAmbient
             L.EnvironmentDiffuseScale  = P.EnvironmentDiffuseScale
             L.EnvironmentSpecularScale = P.EnvironmentSpecularScale
+            -- Restore fog
             L.FogStart                 = P.FogStart
             L.FogEnd                   = P.FogEnd
             L.FogColor                 = P.FogColor
-            L.ColorShift_Top           = P.ColorShift_Top -- GRAY SKY FIX
         end
         if Variables.Config.ForceClearBlurOnRestore then
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
@@ -1290,6 +1322,7 @@ Two quick fixes.
     end)
     restorePostEffects()
 
+    -- Restore Skyboxes
     for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
         if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
     end
@@ -1436,8 +1469,8 @@ group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=
 group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
 group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
 group:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
-group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) 
-group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox }) 
+group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) -- NEW
+group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox }) -- NEW
 group:AddToggle("OptMinQuality",     { Text="Use Minimum Quality",      Default=Variables.Config.UseMinimumQuality })
 group:AddToggle("OptClearBlurRestore",{ Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
 
@@ -1666,9 +1699,25 @@ bindToggle("OptNoPostFX", function(v)
     end
 end)
 
+--[[
+    FIX (APPLIED):
+    Modified GraySky wiring to handle skybox restoration logic.
+]]
 bindToggle("OptGraySky", function(v)
     Variables.Config.GraySky = v
-    if Variables.Config.Enabled then scheduleApplyLighting(); buildWatchers() end
+    if Variables.Config.Enabled then
+        if not v then
+            -- Restore sky if 'RemoveSkybox' is also off
+            if not Variables.Config.RemoveSkybox then
+                for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
+                    if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
+                end
+                Variables.Snapshot.Skyboxes = {}
+            end
+        end
+        scheduleApplyLighting()
+        buildWatchers()
+    end
 end)
 
 bindOption("OptGraySkyShade", function(v)
@@ -1688,7 +1737,6 @@ bindOption("OptFullBrightLvl", function(v)
     if Variables.Config.Enabled and Variables.Config.FullBright then scheduleApplyLighting() end
 end)
 
--- NEW: Bind OptNoFog
 bindToggle("OptNoFog", function(v)
     Variables.Config.RemoveFog = v
     if Variables.Config.Enabled then
@@ -1710,7 +1758,10 @@ bindToggle("OptNoFog", function(v)
     end
 end)
 
--- NEW: Bind OptNoSky
+--[[
+    FIX (APPLIED):
+    Modified NoSky wiring to handle GraySky inter-dependency.
+]]
 bindToggle("OptNoSky", function(v)
     Variables.Config.RemoveSkybox = v
     if Variables.Config.Enabled then
@@ -1723,15 +1774,20 @@ bindToggle("OptNoSky", function(v)
                 end
             end
             for _, sky in ipairs(currentSkies) do
-                table.insert(Variables.Snapshot.Skyboxes, sky)
+                if not table.find(Variables.Snapshot.Skyboxes, sky) then -- Check before adding
+                    table.insert(Variables.Snapshot.Skyboxes, sky)
+                end
                 sky.Parent = nil
             end
         else
             -- Restore: Put back the skyboxes we took
-            for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
-                if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
+            -- BUT: Don't restore if GraySky is still on
+            if not Variables.Config.GraySky then
+                for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
+                    if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
+                end
+                Variables.Snapshot.Skyboxes = {}
             end
-            Variables.Snapshot.Skyboxes = {}
         end
         buildWatchers() -- Re-arm the childadded watcher
     end
