@@ -707,7 +707,7 @@ end
 
 --[[
     FIX (APPLIED):
-    - GraySky: Sets ambient to 128 gray, time to 12, and removes sky. Does NOT touch brightness.
+    - GraySky: Sets ambient to 128 gray, time to 12, and removes sky/clouds/atmosphere. Does NOT touch brightness.
     - FullBright: Sets brightness from slider, and ambient to 192 gray.
 ]]
 local function applyLowLighting()
@@ -726,15 +726,20 @@ local function applyLowLighting()
             L.Ambient = color
             L.OutdoorAmbient = color
 
-            -- Remove skybox
+            -- Remove skybox, clouds, AND atmosphere
             for _, child in ipairs(L:GetChildren()) do
-                if child:IsA("Sky") or child:IsA("Clouds") then -- Also remove clouds
+                if child:IsA("Sky") or child:IsA("Clouds") or child:IsA("Atmosphere") then -- ADDED ATMOSPHERE
                     if not table.find(Variables.Snapshot.Skyboxes, child) then
                         table.insert(Variables.Snapshot.Skyboxes, child)
                     end
                     child.Parent = nil
                 end
             end
+            
+            -- NEW: Force fog to solid gray
+            L.FogColor = color
+            L.FogStart = 0
+            L.FogEnd = 0
         
         elseif Variables.Config.FullBright then
             -- Full Bright mode: High brightness + bright ambient.
@@ -755,6 +760,11 @@ local function applyRemoveFog()
     end)
 end
 
+--[[
+    FIX (APPLIED):
+    'scheduleApplyLighting' now restores all relevant lighting properties
+    if GraySky/FullBright are toggled off. It also handles fog restoration.
+]]
 local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
@@ -777,8 +787,20 @@ local function scheduleApplyLighting()
                 end)
             end
             
+            -- Fog logic: Apply or Restore
             if Variables.Config.RemoveFog then
                 applyRemoveFog()
+            elseif not Variables.Config.GraySky then -- Don't restore if GraySky is on
+                -- Restore fog if NoFog is off AND GraySky is off
+                pcall(function()
+                    local P = Variables.Snapshot.LightingProps
+                    if P and P.FogStart ~= nil then
+                        local L = RbxService.Lighting
+                        L.FogStart = P.FogStart
+                        L.FogEnd = P.FogEnd
+                        L.FogColor = P.FogColor
+                    end
+                end)
             end
         end
         Variables.Runtime.LightingApplyScheduled = false
@@ -847,6 +869,7 @@ end
 ----------------------------------------------------------------------
 -- Viewport / VideoFrames and GUI hide/show
 ----------------------------------------------------------------------
+-- NEW: Functions based on V2.lua
 local function hideViewport(frame)
     if not frame or not frame:IsA("ViewportFrame") then return end
     storeOnce(Variables.Snapshot.ViewportVisible, frame, frame.Visible)
@@ -1090,8 +1113,12 @@ end
 local function ApplyToInstance(inst)
     if not inst then return end
     
+    --[[
+        FIX (APPLIED):
+        Watcher now catches Sky, Clouds, AND Atmosphere.
+    ]]
     -- Sky/Clouds (runs if GraySky OR RemoveSkybox is on)
-    if (Variables.Config.GraySky or Variables.Config.RemoveSkybox) and (inst:IsA("Sky") or inst:IsA("Clouds")) then
+    if (Variables.Config.GraySky or Variables.Config.RemoveSkybox) and (inst:IsA("Sky") or inst:IsA("Clouds") or inst:IsA("Atmosphere")) then
         if not table.find(Variables.Snapshot.Skyboxes, inst) then
             table.insert(Variables.Snapshot.Skyboxes, inst)
         end
@@ -1144,8 +1171,13 @@ local function ApplyToInstance(inst)
         guardSound(inst)
     end
 
+    --[[
+        FIX (APPLIED):
+        Corrected config variable name from 'PauseAllAnimations'
+        to 'PauseOtherAnimations' to match your Config table.
+    ]]
     -- Animators
-    if (Variables.Config.PauseCharacterAnimations or Variables.Config.PauseAllAnimations) and inst:IsA("Animator") then
+    if (Variables.Config.PauseCharacterAnimations or Variables.Config.PauseOtherAnimations) and inst:IsA("Animator") then
         guardAnimator(inst)
     end
 
@@ -1712,20 +1744,8 @@ end)
 bindToggle("OptNoFog", function(v)
     Variables.Config.RemoveFog = v
     if Variables.Config.Enabled then
-        if v then
-            applyRemoveFog()
-        else
-            -- Restore just the fog
-            pcall(function()
-                local P = Variables.Snapshot.LightingProps
-                if P and P.FogStart ~= nil then
-                    local L = RbxService.Lighting
-                    L.FogStart = P.FogStart
-                    L.FogEnd = P.FogEnd
-                    L.FogColor = P.FogColor
-                end
-            end)
-        end
+        -- Let the main scheduler handle applying/restoring fog
+        scheduleApplyLighting()
         buildWatchers() -- Re-arm the lighting watcher
     end
 end)
@@ -1737,7 +1757,7 @@ bindToggle("OptNoSky", function(v)
             -- Apply: Find all current skyboxes, snapshot, and remove
             local currentSkies = {}
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
-                if child:IsA("Sky") or child:IsA("Clouds") then
+                if child:IsA("Sky") or child:IsA("Clouds") or child:IsA("Atmosphere") then
                     table.insert(currentSkies, child)
                 end
             end
