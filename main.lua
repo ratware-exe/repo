@@ -2,8 +2,9 @@
 do
     local GlobalEnv = (getgenv and getgenv()) or _G
     GlobalEnv.RepoBase = "https://raw.githubusercontent.com/ratware-exe/repo/main/"
-    GlobalEnv.ObsidianRepoBase = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-
+    --GlobalEnv.ObsidianRepoBase = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+    GlobalEnv.ObsidianRepoBase = "https://raw.githubusercontent.com/WFYBGG/Obsidian/main/"
+    
     -- (Keep _G in sync just in case)
     _G.RepoBase = GlobalEnv.RepoBase
     _G.ObsidianRepoBase = GlobalEnv.ObsidianRepoBase
