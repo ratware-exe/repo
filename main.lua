@@ -13,6 +13,7 @@ do
     local featurePaths = {
         -- If you split Shield out earlier, put it first:
         "modules/Shield.lua",
+        "modules/PlayerESP.lua",
         "modules/VIPServerCommands.lua",
         "modules/InfZoom.lua",
         "modules/AntiAFK.lua",
