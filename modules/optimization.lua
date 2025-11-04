@@ -1,4 +1,4 @@
--- modules/Optimization.lua
+-- modules/optimization.lua
 do return function(UI)
 
 ----------------------------------------------------------------------
