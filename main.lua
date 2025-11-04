@@ -13,12 +13,12 @@ do
 
     local featurePaths = {
         -- If you split Shield out earlier, put it first:
-        "modules/Shield.lua",
-        "modules/PlayerESP.lua",
-        "modules/VIPServerCommands.lua",
-        "modules/InfZoom.lua",
-        "modules/AntiAFK.lua",
-        "modules/Optimization.lua",
+        "modules/shield.lua",
+        "modules/playeresp.lua",
+        "modules/vipservercommands.lua",
+        "modules/infinitezoom.lua",
+        "modules/antiafk.lua",
+        "modules/optimization.lua",
     }
 
     for i = 1, #featurePaths do
