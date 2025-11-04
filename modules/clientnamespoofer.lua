@@ -88,10 +88,9 @@ do
 				end
 
 				local text = tostring(obj.Text or "")
+				-- FIXED: Removed DisplayName check. This function now ONLY handles Name and UserId.
 				if string.find(text, Variables.Backup.Name, 1, true) then
 					obj.Text = (text:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
-				elseif string.find(text, Variables.Backup.DisplayName, 1, true) then
-					obj.Text = (text:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 				elseif string.find(text, tostring(Variables.Backup.UserId), 1, true) then
 					obj.Text = (text:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 				end
@@ -101,17 +100,16 @@ do
 					local newText = tostring(obj.Text or "")
 
 					-- If new text contains originals, update baseline snapshot
+					-- FIXED: Removed DisplayName check
 					if string.find(newText, Variables.Backup.Name, 1, true)
-					or string.find(newText, Variables.Backup.DisplayName, 1, true)
 					or string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
 						Variables.Snapshots.Text[obj] = newText
 					end
 
 					-- Re-apply spoof (same rules)
+					-- FIXED: Removed DisplayName check
 					if string.find(newText, Variables.Backup.Name, 1, true) then
 						obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
-					elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
-						obj.Text = (newText:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 					elseif string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
 						obj.Text = (newText:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 					end
@@ -206,10 +204,9 @@ do
 				for obj, base in pairs(Variables.Snapshots.Text) do
 					if obj and obj.Parent then
 						local t = base
+						-- FIXED: Removed DisplayName check
 						if string.find(t, Variables.Backup.Name, 1, true) then
 							obj.Text = (t:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
-						elseif string.find(t, Variables.Backup.DisplayName, 1, true) then
-							obj.Text = (t:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 						elseif string.find(t, tostring(Variables.Backup.UserId), 1, true) then
 							obj.Text = (t:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 						end
@@ -235,6 +232,8 @@ do
 		local function Stop()
 			if not Variables.RunFlag then return end
 			Variables.RunFlag = false
+
+PLAYERSERVICE = game:GetService("Players")
 
 			Variables.Maids.NameSpoofer:DoCleaning()
 
