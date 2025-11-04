@@ -1765,7 +1765,7 @@ bindToggle("OptNoSky", function(v)
             -- Apply: Find all current skyboxes, snapshot, and remove
             local currentSkies = {}
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
-                if child:IsA("Sky") or child:IsA("Clouds") or child:IsA("Atmosphere") then
+                if child:IsA("Sky") or child:IsA("Clouds") or child:IsC("Atmosphere") then
                     table.insert(currentSkies, child)
                 end
             end
