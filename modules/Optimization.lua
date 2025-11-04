@@ -144,8 +144,23 @@ local function beginSweepToken()
     return bumpSweepToken()
 end
 
+--[[
+    FIX 2 (Step 1/3) APPLIED:
+    'shouldCancelSweep' is modified.
+    - 'cancelRequested' now takes priority and always forces a stop.
+    - If no 'guardToken' is passed (e.g., from a master sweep like applyAll/restoreAll),
+      it will no longer check the sweepToken, preventing individual toggles
+      from cancelling the master functions.
+]]
 local function shouldCancelSweep(guardToken)
-    return guardToken ~= Variables.Runtime.sweepToken or Variables.Runtime.cancelRequested
+    -- The master 'cancelRequested' flag always takes priority
+    if Variables.Runtime.cancelRequested then return true end
+
+    -- If no token was passed (e.g., from a master sweep), don't check sweepToken
+    if guardToken == nil then return false end
+    
+    -- Only check sweepToken for individual toggles
+    return guardToken ~= Variables.Runtime.sweepToken
 end
 
 -- Each long traversal checks both "Enabled" and a guard token; if a new
@@ -1113,13 +1128,19 @@ local function applyAll()
 
     if Variables.Config.MuteAllSounds then applyMuteAllSounds() end
 
-    local tk = beginSweepToken()
+    --[[
+        FIX 2 (Step 2/3) APPLIED:
+        'tk' variable removed from applyAll. All chunked sweeps
+        now pass 'nil' as the guardToken, so they are only
+        cancellable by 'cancelRequested' (the master flag).
+    ]]
+    -- local tk = beginSweepToken() -- REMOVED
 
-    eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator, tk)
+    eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator, nil)
     if Variables.Config.PauseCharacterAnimations then toggleCharacterAnimateScripts(false) end
 
     if Variables.Config.FreezeWorldAssemblies then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, freezeWorldPart, tk)
+        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, freezeWorldPart, nil)
     end
 
     if Variables.Config.DisableConstraints then disableWorldConstraints() end
@@ -1129,20 +1150,20 @@ local function applyAll()
     removeNetOwnership()
 
     if Variables.Config.StopParticleSystems then
-        eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter, tk)
+        eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter, nil)
     end
 
     if Variables.Config.DestroyEmitters and not Variables.Irreversible.EmittersDestroyed then
-        eachDescendantChunked(RbxService.Workspace, isEmitter, destroyEmitterIrreversible, tk)
+        eachDescendantChunked(RbxService.Workspace, isEmitter, destroyEmitterIrreversible, nil)
         Variables.Irreversible.EmittersDestroyed = true
     end
 
     if Variables.Config.SmoothPlasticEverywhere then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart, tk)
+        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart, nil)
     end
 
     if Variables.Config.HideDecals then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture, tk)
+        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture, nil)
     end
 
     if Variables.Config.NukeTextures and not Variables.Irreversible.TexturesNuked then
@@ -1150,11 +1171,11 @@ local function applyAll()
             return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
                 or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
                 or inst:IsA("Pants") or inst:IsA("ShirtGraphic") or inst:IsA("BasePart")
-        end, nukeTexturesIrreversible, tk)
+        end, nukeTexturesIrreversible, nil)
 
         eachDescendantChunked(game, function(inst)
             return inst:IsA("ImageLabel") or inst:IsA("ImageButton")
-        end, nukeTexturesIrreversible, tk)
+        end, nukeTexturesIrreversible, nil)
 
         Variables.Irreversible.TexturesNuked = true
     end
@@ -1184,22 +1205,28 @@ local function restoreAll()
     -- ALWAYS restore (fixes spam-toggle wedge)
     pcall(function() RbxService.RunService:Set3dRenderingEnabled(true) end)
 
-    local tk = beginSweepToken()
+    --[[
+        FIX 2 (Step 3/3) APPLIED:
+        'tk' variable removed from restoreAll. All restore
+        functions now pass 'nil' as the guardToken, so they are only
+        cancellable by 'cancelRequested' (the master flag).
+    ]]
+    -- local tk = beginSweepToken() -- REMOVED
 
-    restoreViewportAndVideo(tk)
-    restoreSounds(tk)
+    restoreViewportAndVideo(nil)
+    restoreSounds(nil)
     releaseAnimatorGuards()
     toggleCharacterAnimateScripts(true)
 
-    restoreAnchoredParts(tk)
-    restoreWorldConstraints(tk)
-    restoreCharacterAnchors(tk)
+    restoreAnchoredParts(nil)
+    restoreWorldConstraints(nil)
+    restoreCharacterAnchors(nil)
 
     restorePlayerGuiAll()
     restoreCoreGuiAll()
-    restorePartMaterials(tk)
-    restoreDecalsAndTextures(tk)
-    restoreEmitters(tk)
+    restorePartMaterials(nil)
+    restoreDecalsAndTextures(nil)
+    restoreEmitters(nil)
 
     -- Lighting + postFX
     pcall(function()
@@ -1256,18 +1283,36 @@ local function requestEnabled(desired)
     end
 
     Variables.Runtime.inTransition = true
+
+    --[[
+        FIX 1 APPLIED:
+        The master loop is wrapped in a pcall.
+        'inTransition' is set to false in a 'finally' block (executes after
+        pcall) to guarantee the module "un-bricks" itself even if
+        applyAll/restoreAll errors.
+    ]]
     task.spawn(function()
-        while Variables.Config.Enabled ~= Variables.Runtime.desiredEnabled do
-            Variables.Runtime.transitionId += 1
-            local want = Variables.Runtime.desiredEnabled
-            if want then
-                applyAll()
-            else
-                restoreAll()
+        -- Use a pcall to catch any error in the master loop
+        local success, err = pcall(function()
+            while Variables.Config.Enabled ~= Variables.Runtime.desiredEnabled do
+                Variables.Runtime.transitionId += 1
+                local want = Variables.Runtime.desiredEnabled
+                if want then
+                    applyAll()
+                else
+                    restoreAll()
+                end
+                task.wait() -- yield to allow rapid flips to coalesce
             end
-            task.wait() -- yield to allow rapid flips to coalesce
-        end
+        end)
+
+        -- CRITICAL: Always set inTransition to false, even if the loop errored.
+        -- This "un-bricks" the module.
         Variables.Runtime.inTransition = false
+
+        if not success then
+            warn("Optimization master loop failed:", err)
+        end
     end)
 end
 
@@ -1288,7 +1333,7 @@ elseif TargetTab and typeof(TargetTab.AddLeftGroupbox) == "function" then
     group = TargetTab:AddLeftGroupbox("Optimization", "power")
 else
     -- Last resort: try root UI
-    group = UI.Tabs.Main and UI.Tabs.Main:AddLeftGroupbox("Optimization", "power")
+    group = UI.Tabs.Main and UI.Tabs.Main:AddLeftGroupbox("Optimization","power")
 end
 
 -- Build controls (no chained :OnChanged!)
@@ -1437,7 +1482,7 @@ bindToggle("OptPauseChar", function(v)
         releaseAnimatorGuards()
         local tk = beginSweepToken()
         eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator, tk)
-        buildWatchers()
+        buildWatchBypass()
     end
 end)
 
