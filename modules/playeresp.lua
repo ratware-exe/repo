@@ -468,7 +468,8 @@ do
                                 visuals.Name.Position = Vector2.new(screenPos.X, tl.Y - cfg.NameSize - 2)
                                 visuals.Name.Color = (cfg.RainbowMode and getRainbow()) or cfg.NameColor
                                 visuals.Name.Size = cfg.NameSize
-                                visuals.Name.Text = (cfg.DisplayName and p.DisplayName) or p.Name
+                                --visuals.Name.Text = (cfg.DisplayName and p.DisplayName) or p.Name -- Shows DISPLAY name
+                                visuals.Name.Text = p.Name -- Shows USERNAME
                                 visuals.Name.Transparency = alpha
                                 visuals.Name.Visible = showDrawn
                             end
