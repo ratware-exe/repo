@@ -79,7 +79,6 @@ local Variables = {
 
         -- Water replacement (auto‑mimic)
         ReplaceWaterWithBlock   = false,
-        WaterColor              = Color3.fromRGB(30, 85, 255),
         WaterTransparency       = 0.25,   -- 0..1
     },
 
@@ -105,7 +104,6 @@ local Variables = {
         QualityLevel       = nil, -- Enum.QualityLevel
 
         TerrainWater = {          -- for Terrain mimic mode
-            WaterColor       = nil,
             WaterTransparency= nil,
             WaveSize         = nil,
             WaveSpeed        = nil,
@@ -820,7 +818,6 @@ local function applyWaterReplacement()
         proxy.Anchored = true
         proxy.CanCollide = false
         proxy.Material = Enum.Material.SmoothPlastic
-        proxy.Color = Variables.Config.WaterColor
         proxy.Transparency = math.clamp(Variables.Config.WaterTransparency, 0, 1)
         proxy.Size = source.Size
         proxy.CFrame = source.CFrame
@@ -859,10 +856,6 @@ local function applyWaterReplacement()
     elseif Variables.Runtime.WaterMode == "Terrain" then
         local terrain = Variables.Runtime.WaterSource
         if terrain then
-            if Variables.Snapshot.TerrainWater.WaterColor == nil then
-                local okC, col = pcall(function() return terrain.WaterColor end)
-                if okC then Variables.Snapshot.TerrainWater.WaterColor = col end
-            end
             if Variables.Snapshot.TerrainWater.WaterTransparency == nil then
                 local okT, tr = pcall(function() return terrain.WaterTransparency end)
                 if okT then Variables.Snapshot.TerrainWater.WaterTransparency = tr end
@@ -881,7 +874,6 @@ local function applyWaterReplacement()
             end
 
             pcall(function()
-                terrain.WaterColor        = Variables.Config.WaterColor
                 terrain.WaterTransparency = math.clamp(Variables.Config.WaterTransparency, 0, 1)
                 terrain.WaterWaveSize     = 0
                 terrain.WaterWaveSpeed    = 0
@@ -919,7 +911,6 @@ local function removeWaterReplacement()
         local snap = Variables.Snapshot.TerrainWater
         pcall(function()
             if terrain then
-                if snap.WaterColor        then terrain.WaterColor        = snap.WaterColor        end
                 if snap.WaterTransparency then terrain.WaterTransparency = snap.WaterTransparency end
                 if snap.WaveSize          then terrain.WaterWaveSize     = snap.WaveSize          end
                 if snap.WaveSpeed         then terrain.WaterWaveSpeed    = snap.WaveSpeed         end
@@ -927,7 +918,7 @@ local function removeWaterReplacement()
             end
         end)
         Variables.Snapshot.TerrainWater = {
-            WaterColor=nil, WaterTransparency=nil, WaveSize=nil, WaveSpeed=nil, Reflectance=nil
+            WaterTransparency=nil, WaveSize=nil, WaveSpeed=nil, Reflectance=nil
         }
     end
 
@@ -1259,10 +1250,6 @@ group:AddLabel("Water Replacement (auto‑mimic)")
 group:AddToggle("OptWaterProxy",     { Text="Replace Water", Default=Variables.Config.ReplaceWaterWithBlock })
 
 -- Color picker must be hosted on a Label or a Toggle (per Obsidian).
-group:AddLabel("Water Color"):AddColorPicker("OptWaterColor", {
-    Default = Variables.Config.WaterColor,
-    Title   = "Water Color",
-})
 group:AddSlider("OptWaterTrans", {
     Text    = "Water Transparency",
     Min     = 0,
@@ -1506,16 +1493,6 @@ bindToggle("OptWaterProxy", function(v)
     Variables.Config.ReplaceWaterWithBlock = v
     if not Variables.Config.Enabled then return end
     if v then applyWaterReplacement() else removeWaterReplacement() end
-end)
-
-bindOption("OptWaterColor", function(_, opt)
-    local color = (opt and opt.Value) or Variables.Config.WaterColor
-    Variables.Config.WaterColor = color
-    if Variables.Runtime.WaterMode == "Part" and Variables.Runtime.WaterProxyPart then
-        Variables.Runtime.WaterProxyPart.Color = color
-    elseif Variables.Runtime.WaterMode == "Terrain" and Variables.Runtime.WaterSource then
-        pcall(function() Variables.Runtime.WaterSource.WaterColor = color end)
-    end
 end)
 
 bindOption("OptWaterTrans", function(v)
