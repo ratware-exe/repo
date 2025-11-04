@@ -19,6 +19,23 @@ do
 			BlankProfilePicture = true,
 		}
 
+		-- === Backup (Run this ONCE, as early as possible) ===================
+		local function ensureBackup()
+			-- If backup already exists (globally) or LocalPlayer isn't ready, skip.
+			if GlobalEnv.NameSpoofBackup or not LocalPlayer then return end
+			pcall(function()
+				-- Store backup globally to survive script reloads
+				GlobalEnv.NameSpoofBackup = {
+					Name 				= LocalPlayer.Name,
+					DisplayName 		= LocalPlayer.DisplayName,
+					UserId 				= LocalPlayer.UserId,
+					CharacterAppearanceId = LocalPlayer.CharacterAppearanceId or LocalPlayer.UserId,
+				}
+			end)
+		end
+		ensureBackup() -- <<< FIXED: Run backup on script load, BEFORE Start() is ever called
+
+		-- === State (continued) ==============================================
 		local Variables = {
 			Maids = { NameSpoofer = Maid.new() },
 			RunFlag = false,
@@ -49,20 +66,7 @@ do
 			if old then old:Destroy() end
 		end
 
-		local function ensureBackup()
-			-- If backup already exists (globally) or LocalPlayer isn't ready, skip.
-			if Variables.Backup or not LocalPlayer then return end
-			pcall(function()
-				-- Store backup globally to survive script reloads
-				GlobalEnv.NameSpoofBackup = {
-					Name 				= LocalPlayer.Name,
-					DisplayName 		= LocalPlayer.DisplayName,
-					UserId 				= LocalPlayer.UserId,
-					CharacterAppearanceId = LocalPlayer.CharacterAppearanceId or LocalPlayer.UserId,
-				}
-				Variables.Backup = GlobalEnv.NameSpoofBackup
-			end)
-		end
+		-- ensureBackup() removed from here, now runs at top
 
 		local function applyPlayerFields()
 			pcall(function() LocalPlayer.DisplayName = Variables.Config.FakeDisplayName end)
@@ -88,9 +92,11 @@ do
 				end
 
 				local text = tostring(obj.Text or "")
-				-- FIXED: Removed DisplayName check. This function now ONLY handles Name and UserId.
+				-- <<< FIXED: Restored DisplayName logic
 				if string.find(text, Variables.Backup.Name, 1, true) then
 					obj.Text = (text:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
+				elseif string.find(text, Variables.Backup.DisplayName, 1, true) then
+					obj.Text = (text:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 				elseif string.find(text, tostring(Variables.Backup.UserId), 1, true) then
 					obj.Text = (text:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 				end
@@ -100,16 +106,19 @@ do
 					local newText = tostring(obj.Text or "")
 
 					-- If new text contains originals, update baseline snapshot
-					-- FIXED: Removed DisplayName check
+					-- <<< FIXED: Restored DisplayName logic
 					if string.find(newText, Variables.Backup.Name, 1, true)
+					or string.find(newText, Variables.Backup.DisplayName, 1, true)
 					or string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
 						Variables.Snapshots.Text[obj] = newText
 					end
 
 					-- Re-apply spoof (same rules)
-					-- FIXED: Removed DisplayName check
+					-- <<< FIXED: Restored DisplayName logic
 					if string.find(newText, Variables.Backup.Name, 1, true) then
 						obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
+					elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
+						obj.Text = (newText:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 					elseif string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
 						obj.Text = (newText:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 					end
@@ -204,9 +213,11 @@ do
 				for obj, base in pairs(Variables.Snapshots.Text) do
 					if obj and obj.Parent then
 						local t = base
-						-- FIXED: Removed DisplayName check
+						-- <<< FIXED: Restored DisplayName logic
 						if string.find(t, Variables.Backup.Name, 1, true) then
 							obj.Text = (t:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
+						elseif string.find(t, Variables.Backup.DisplayName, 1, true) then
+							obj.Text = (t:gsub(esc(Variables.Backup.DisplayName), Variables.Config.FakeDisplayName))
 						elseif string.find(t, tostring(Variables.Backup.UserId), 1, true) then
 							obj.Text = (t:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 						end
@@ -218,7 +229,7 @@ do
 
 			Variables.RunFlag = true
 			killOldStandaloneUi()
-			ensureBackup()
+			-- ensureBackup() -- Removed from here
 
 			setupGlobalHook()
 			hookPlayerList()
@@ -232,8 +243,6 @@ do
 		local function Stop()
 			if not Variables.RunFlag then return end
 			Variables.RunFlag = false
-
-PLAYERSERVICE = game:GetService("Players")
 
 			Variables.Maids.NameSpoofer:DoCleaning()
 
@@ -326,15 +335,13 @@ PLAYERSERVICE = game:GetService("Players")
 			elseif v == "" then -- Use 0 if empty string
 				Variables.Config.FakeId = 0
 			end
-			-- If v is non-numeric (like "abc"), n is nil and v ~= "",
-			-- so the config just keeps its last valid value, which is fine.
 			if Variables.RunFlag then Start() end
 		end)
 		UI.Toggles.CNS_BlankPfp:OnChanged(function(val)
 			Variables.Config.BlankProfilePicture = val and true or false
 			if Variables.RunFlag then Start() end
 		end)
-		UI.Toggles.CNS_Enable:OnChanged(function(enabledState)
+		UI.TCoggles.CNS_Enable:OnChanged(function(enabledState)
 			if enabledState then Start() else Stop() end
 		end)
 
