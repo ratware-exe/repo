@@ -145,21 +145,29 @@ local function beginSweepToken()
 end
 
 --[[
-    FIX 2 (Step 1/3) APPLIED:
-    'shouldCancelSweep' is modified.
-    - 'cancelRequested' now takes priority and always forces a stop.
-    - If no 'guardToken' is passed (e.g., from a master sweep like applyAll/restoreAll),
-      it will no longer check the sweepToken, preventing individual toggles
-      from cancelling the master functions.
+    FIX 2 (NEW) APPLIED:
+    'shouldCancelSweep' is modified to use a special 'guardToken' (0)
+    for master sweeps (applyAll/restoreAll).
+    - 'cancelRequested' always cancels everything.
+    - Master sweeps (token 0) are *only* cancelled by 'cancelRequested'.
+    - Individual sweeps (token > 0) are cancelled by 'cancelRequested'
+      OR if the global 'sweepToken' changes (i.e., another individual
+      toggle is clicked).
+    This stops individual toggles from cancelling the master toggle.
 ]]
 local function shouldCancelSweep(guardToken)
-    -- The master 'cancelRequested' flag always takes priority
+    -- Master cancel flag always wins
     if Variables.Runtime.cancelRequested then return true end
 
-    -- If no token was passed (e.g., from a master sweep), don't check sweepToken
-    if guardToken == nil then return false end
-    
-    -- Only check sweepToken for individual toggles
+    -- If guardToken is 0, this is a master sweep.
+    -- It should NOT be cancelled by the global sweepToken.
+    -- It is ONLY cancellable by cancelRequested (checked above).
+    if guardToken == 0 then
+        return false
+    end
+
+    -- Otherwise, this is an individual sweep (token > 0).
+    -- It should be cancelled if the global token changes.
     return guardToken ~= Variables.Runtime.sweepToken
 end
 
@@ -1129,18 +1137,18 @@ local function applyAll()
     if Variables.Config.MuteAllSounds then applyMuteAllSounds() end
 
     --[[
-        FIX 2 (Step 2/3) APPLIED:
-        'tk' variable removed from applyAll. All chunked sweeps
-        now pass 'nil' as the guardToken, so they are only
-        cancellable by 'cancelRequested' (the master flag).
+        FIX 2 (NEW) APPLIED:
+        'tk' is set to 0. This special value tells 'shouldCancelSweep'
+        that this is a master sweep and should not be cancelled by
+        individual toggles (i.e., by the global sweepToken changing).
     ]]
-    -- local tk = beginSweepToken() -- REMOVED
+    local tk = 0 -- WAS: beginSweepToken()
 
-    eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator, nil)
+    eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator, tk)
     if Variables.Config.PauseCharacterAnimations then toggleCharacterAnimateScripts(false) end
 
     if Variables.Config.FreezeWorldAssemblies then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, freezeWorldPart, nil)
+        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, freezeWorldPart, tk)
     end
 
     if Variables.Config.DisableConstraints then disableWorldConstraints() end
@@ -1150,20 +1158,20 @@ local function applyAll()
     removeNetOwnership()
 
     if Variables.Config.StopParticleSystems then
-        eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter, nil)
+        eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter, tk)
     end
 
     if Variables.Config.DestroyEmitters and not Variables.Irreversible.EmittersDestroyed then
-        eachDescendantChunked(RbxService.Workspace, isEmitter, destroyEmitterIrreversible, nil)
+        eachDescendantChunked(RbxService.Workspace, isEmitter, destroyEmitterIrreversible, tk)
         Variables.Irreversible.EmittersDestroyed = true
     end
 
     if Variables.Config.SmoothPlasticEverywhere then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart, nil)
+        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart, tk)
     end
 
     if Variables.Config.HideDecals then
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture, nil)
+        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture, tk)
     end
 
     if Variables.Config.NukeTextures and not Variables.Irreversible.TexturesNuked then
@@ -1171,11 +1179,11 @@ local function applyAll()
             return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
                 or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
                 or inst:IsA("Pants") or inst:IsA("ShirtGraphic") or inst:IsA("BasePart")
-        end, nukeTexturesIrreversible, nil)
+        end, nukeTexturesIrreversible, tk)
 
         eachDescendantChunked(game, function(inst)
             return inst:IsA("ImageLabel") or inst:IsA("ImageButton")
-        end, nukeTexturesIrreversible, nil)
+        end, nukeTexturesIrreversible, tk)
 
         Variables.Irreversible.TexturesNuked = true
     end
@@ -1206,27 +1214,28 @@ local function restoreAll()
     pcall(function() RbxService.RunService:Set3dRenderingEnabled(true) end)
 
     --[[
-        FIX 2 (Step 3/3) APPLIED:
-        'tk' variable removed from restoreAll. All restore
-        functions now pass 'nil' as the guardToken, so they are only
-        cancellable by 'cancelRequested' (the master flag).
+        FIX 2 (NEW) APPLIED:
+        'tk' is set to 0. This special value tells 'shouldCancelSweep'
+        that this is a master sweep and should not be cancelled by
+        individual toggles. This fixes the bug where restoration
+        would fail even without spamming.
     ]]
-    -- local tk = beginSweepToken() -- REMOVED
+    local tk = 0 -- WAS: beginSweepToken()
 
-    restoreViewportAndVideo(nil)
-    restoreSounds(nil)
+    restoreViewportAndVideo(tk)
+    restoreSounds(tk)
     releaseAnimatorGuards()
     toggleCharacterAnimateScripts(true)
 
-    restoreAnchoredParts(nil)
-    restoreWorldConstraints(nil)
-    restoreCharacterAnchors(nil)
+    restoreAnchoredParts(tk)
+    restoreWorldConstraints(tk)
+    restoreCharacterAnchors(tk)
 
     restorePlayerGuiAll()
     restoreCoreGuiAll()
-    restorePartMaterials(nil)
-    restoreDecalsAndTextures(nil)
-    restoreEmitters(nil)
+    restorePartMaterials(tk)
+    restoreDecalsAndTextures(tk)
+    restoreEmitters(tk)
 
     -- Lighting + postFX
     pcall(function()
@@ -1287,9 +1296,9 @@ local function requestEnabled(desired)
     --[[
         FIX 1 APPLIED:
         The master loop is wrapped in a pcall.
-        'inTransition' is set to false in a 'finally' block (executes after
-        pcall) to guarantee the module "un-bricks" itself even if
-        applyAll/restoreAll errors.
+        'inTransition' is set to false after the pcall executes,
+        guaranteeing the module "un-bricks" itself even if
+        applyAll/restoreAll errors during a spam.
     ]]
     task.spawn(function()
         -- Use a pcall to catch any error in the master loop
@@ -1333,7 +1342,7 @@ elseif TargetTab and typeof(TargetTab.AddLeftGroupbox) == "function" then
     group = TargetTab:AddLeftGroupbox("Optimization", "power")
 else
     -- Last resort: try root UI
-    group = UI.Tabs.Main and UI.Tabs.Main:AddLeftGroupbox("Optimization","power")
+    group = UI.Tabs.Main and UI.Tabs.Main:AddLeftGroupbox("Optimization", "power")
 end
 
 -- Build controls (no chained :OnChanged!)
@@ -1384,7 +1393,7 @@ group:AddDivider()
 group:AddLabel("Lighting / Quality")
 
 group:AddToggle("OptNoGrass",        { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
-group:AddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
+group:AddAddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
 group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=Variables.Config.GraySky })
 group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
 group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
@@ -1482,7 +1491,7 @@ bindToggle("OptPauseChar", function(v)
         releaseAnimatorGuards()
         local tk = beginSweepToken()
         eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator, tk)
-        buildWatchBypass()
+        buildWatchers()
     end
 end)
 
