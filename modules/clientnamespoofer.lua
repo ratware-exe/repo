@@ -5,48 +5,46 @@ do
 		local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
 		local GlobalEnv  = (getgenv and getgenv()) or _G
 		GlobalEnv.Signal = GlobalEnv.Signal or loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
-		local Maid 		 = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+		local Maid      = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
-		local Players 	= RbxService.Players
-		local CoreGui 	= RbxService.CoreGui
-		local LocalPlayer 	= Players.LocalPlayer
+		local Players     = RbxService.Players
+		local CoreGui     = RbxService.CoreGui
+		local LocalPlayer = Players.LocalPlayer
 
 		-- === State ==========================================================
 		GlobalEnv.NameSpoofConfig = GlobalEnv.NameSpoofConfig or {
-			FakeDisplayName 	 = "NameSpoof",
-			FakeName 			 = "NameSpoof",
-			FakeId 				 = 0,
-			BlankProfilePicture = true,
+			FakeDisplayName      = "NameSpoof",
+			FakeName             = "NameSpoof",
+			FakeId               = 0,
+			BlankProfilePicture  = true,
 		}
 
 		-- === Backup (Run this ONCE, as early as possible) ===================
 		local function ensureBackup()
-			-- If backup already exists (globally) or LocalPlayer isn't ready, skip.
 			if GlobalEnv.NameSpoofBackup or not LocalPlayer then return end
 			pcall(function()
-				-- Store backup globally to survive script reloads
 				GlobalEnv.NameSpoofBackup = {
-					Name 				= LocalPlayer.Name,
-					DisplayName 		= LocalPlayer.DisplayName,
-					UserId 				= LocalPlayer.UserId,
-					CharacterAppearanceId = LocalPlayer.CharacterAppearanceId or LocalPlayer.UserId,
+					Name                   = LocalPlayer.Name,
+					DisplayName            = LocalPlayer.DisplayName,
+					UserId                 = LocalPlayer.UserId,
+					CharacterAppearanceId  = LocalPlayer.CharacterAppearanceId or LocalPlayer.UserId,
 				}
 			end)
 		end
-		ensureBackup() -- <<< FIXED: Run backup on script load, BEFORE Start() is ever called
+		ensureBackup() -- BEFORE Start()
 
 		-- === State (continued) ==============================================
 		local Variables = {
-			Maids = { NameSpoofer = Maid.new() },
-			RunFlag = false,
+			Maids     = { NameSpoofer = Maid.new() },
+			RunFlag   = false,
 
-			Backup = GlobalEnv.NameSpoofBackup, -- { Name, DisplayName, UserId, CharacterAppearanceId }
+			Backup    = GlobalEnv.NameSpoofBackup, -- { Name, DisplayName, UserId, CharacterAppearanceId }
 			Snapshots = {
 				Text  = setmetatable({}, { __mode = "k" }),
 				Image = setmetatable({}, { __mode = "k" }),
 			},
 
-			Config = GlobalEnv.NameSpoofConfig,
+			Config    = GlobalEnv.NameSpoofConfig,
 		}
 
 		local BLANKS = {
@@ -66,8 +64,6 @@ do
 			if old then old:Destroy() end
 		end
 
-		-- ensureBackup() removed from here, now runs at top
-
 		local function applyPlayerFields()
 			pcall(function() LocalPlayer.DisplayName = Variables.Config.FakeDisplayName end)
 			pcall(function() LocalPlayer.CharacterAppearanceId = tonumber(Variables.Config.FakeId) or Variables.Config.FakeId end)
@@ -82,6 +78,7 @@ do
 		-- === Original replace functions (preserved) =========================
 		local function replaceTextInObject(obj)
 			if not obj or not obj.Parent then return end
+			if not Variables.Backup then return end
 			if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
 				if obj:GetAttribute(OUR_INPUT_ATTR) then return end -- never touch our inputs
 				if obj:GetAttribute("TextReplaced") then return end
@@ -92,7 +89,6 @@ do
 				end
 
 				local text = tostring(obj.Text or "")
-				-- <<< FIXED: Restored DisplayName logic
 				if string.find(text, Variables.Backup.Name, 1, true) then
 					obj.Text = (text:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 				elseif string.find(text, Variables.Backup.DisplayName, 1, true) then
@@ -103,18 +99,15 @@ do
 
 				local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
 					task.wait()
+					if not Variables.RunFlag or not Variables.Backup then return end
 					local newText = tostring(obj.Text or "")
 
-					-- If new text contains originals, update baseline snapshot
-					-- <<< FIXED: Restored DisplayName logic
 					if string.find(newText, Variables.Backup.Name, 1, true)
 					or string.find(newText, Variables.Backup.DisplayName, 1, true)
 					or string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
 						Variables.Snapshots.Text[obj] = newText
 					end
 
-					-- Re-apply spoof (same rules)
-					-- <<< FIXED: Restored DisplayName logic
 					if string.find(newText, Variables.Backup.Name, 1, true) then
 						obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 					elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
@@ -129,12 +122,7 @@ do
 
 		local function replaceImageInObject(obj)
 			if not obj or not obj.Parent then return end
-			if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-				if obj:GetAttribute("ImageReplaced") then return end
-				obj:SetAttribute("ImageReplaced", true)
-
-		local function replaceImageInObject(obj)
-			if not obj or not obj.Parent then return end
+			if not Variables.Backup then return end
 			if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
 				if obj:GetAttribute("ImageReplaced") then return end
 				obj:SetAttribute("ImageReplaced", true)
@@ -145,16 +133,19 @@ do
 
 				local image = tostring(obj.Image or "")
 				if Variables.Config.BlankProfilePicture then
-					if string.find(image, tostring(Variables.Backup.UserId), 1, true) or string.find(image, Variables.Backup.Name, 1, true) then
+					if string.find(image, tostring(Variables.Backup.UserId), 1, true)
+					or string.find(image, Variables.Backup.Name, 1, true) then
 						obj.Image = BLANKS[1]
 					end
 				end
 
 				local conn = obj:GetPropertyChangedSignal("Image"):Connect(function()
 					task.wait()
+					if not Variables.RunFlag or not Variables.Backup then return end
 					local newImage = tostring(obj.Image or "")
 					if Variables.Config.BlankProfilePicture then
-						if string.find(newImage, tostring(Variables.Backup.UserId), 1, true) or string.find(newImage, Variables.Backup.Name, 1, true) then
+						if string.find(newImage, tostring(Variables.Backup.UserId), 1, true)
+						or string.find(newImage, Variables.Backup.Name, 1, true) then
 							obj.Image = BLANKS[1]
 						end
 					end
@@ -215,11 +206,9 @@ do
 		-- === Lifecycle ======================================================
 		local function Start()
 			if Variables.RunFlag then
-				-- re-apply with latest config using stored baselines
 				for obj, base in pairs(Variables.Snapshots.Text) do
-					if obj and obj.Parent then
+					if obj and obj.Parent and Variables.Backup then
 						local t = base
-						-- <<< FIXED: Restored DisplayName logic
 						if string.find(t, Variables.Backup.Name, 1, true) then
 							obj.Text = (t:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 						elseif string.find(t, Variables.Backup.DisplayName, 1, true) then
@@ -235,7 +224,6 @@ do
 
 			Variables.RunFlag = true
 			killOldStandaloneUi()
-			-- ensureBackup() -- Removed from here
 
 			setupGlobalHook()
 			hookPlayerList()
@@ -283,14 +271,12 @@ do
 			Default = tostring(Variables.Config.FakeDisplayName or ""),
 			Finished = false, -- live update while typing
 			Placeholder = "Display name...",
-			ClearTextOnFocus = false,
 		})
 		groupbox:AddInput("CNS_Username", {
 			Text = "Fake Username",
 			Default = tostring(Variables.Config.FakeName or ""),
 			Finished = false,
 			Placeholder = "Username...",
-			ClearTextOnFocus = false,
 		})
 		groupbox:AddInput("CNS_UserId", {
 			Text = "Fake UserId",
@@ -298,7 +284,6 @@ do
 			Numeric = true,
 			Finished = false,
 			Placeholder = "123456",
-			ClearTextOnFocus = false,
 		})
 		groupbox:AddToggle("CNS_BlankPfp", {
 			Text = "Blank Profile Picture",
@@ -309,36 +294,39 @@ do
 			Default = false,
 		})
 
-		-- Mark inputs so spoofing never touches them
+		-- Mark inputs so spoofing never touches them + prevent clear-on-focus
 		pcall(function()
 			if UI.Options.CNS_DisplayName.Textbox then
 				UI.Options.CNS_DisplayName.Textbox:SetAttribute(OUR_INPUT_ATTR, true)
+				UI.Options.CNS_DisplayName.Textbox.ClearTextOnFocus = false
 			end
 			if UI.Options.CNS_Username.Textbox then
 				UI.Options.CNS_Username.Textbox:SetAttribute(OUR_INPUT_ATTR, true)
+				UI.Options.CNS_Username.Textbox.ClearTextOnFocus = false
 			end
 			if UI.Options.CNS_UserId.Textbox then
 				UI.Options.CNS_UserId.Textbox:SetAttribute(OUR_INPUT_ATTR, true)
+				UI.Options.CNS_UserId.Textbox.ClearTextOnFocus = false
 			end
 		end)
 
 		-- Inputs → live config (reapply if running)
 		UI.Options.CNS_DisplayName:OnChanged(function(v)
-			v = v or "" -- Ensure v is not nil
+			v = v or ""
 			Variables.Config.FakeDisplayName = v
 			if Variables.RunFlag then Start() end
 		end)
 		UI.Options.CNS_Username:OnChanged(function(v)
-			v = v or "" -- Ensure v is not nil
+			v = v or ""
 			Variables.Config.FakeName = v
 			if Variables.RunFlag then Start() end
 		end)
 		UI.Options.CNS_UserId:OnChanged(function(v)
-			v = v or "" -- Ensure v is not nil
+			v = v or ""
 			local n = tonumber(v)
-			if n then -- Use number if valid
+			if n then
 				Variables.Config.FakeId = n
-			elseif v == "" then -- Use 0 if empty string
+			elseif v == "" then
 				Variables.Config.FakeId = 0
 			end
 			if Variables.RunFlag then Start() end
@@ -347,7 +335,6 @@ do
 			Variables.Config.BlankProfilePicture = val and true or false
 			if Variables.RunFlag then Start() end
 		end)
-		-- FIXED: Corrected UI.TCoggles to UI.Toggles
 		UI.Toggles.CNS_Enable:OnChanged(function(enabledState)
 			if enabledState then Start() else Stop() end
 		end)
