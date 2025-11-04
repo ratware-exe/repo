@@ -73,6 +73,9 @@ local Variables = {
         GraySkyShade            = 128,    -- 0..255
         FullBright              = true,
         FullBrightLevel         = 2,      -- 0..5
+        
+        RemoveFog               = false, -- NEW
+        RemoveSkybox            = false, -- NEW
 
         UseMinimumQuality       = true,
         ForceClearBlurOnRestore = true,
@@ -98,10 +101,16 @@ local Variables = {
 
         EmitterProps       = {},  -- [reversible stop] per type snapshot (see stopEmitter)
 
-        LightingProps      = {},  -- saved lighting fields
+        LightingProps      = { -- NEW: Added Fog properties
+            FogStart = nil,
+            FogEnd = nil,
+            FogColor = nil
+        },  -- saved lighting fields
         PostEffects        = {},  -- Effect -> Enabled
         TerrainDecoration  = nil, -- bool
         QualityLevel       = nil, -- Enum.QualityLevel
+
+        Skyboxes           = {}, -- NEW: To store removed skyboxes
 
         TerrainWater = {          -- for Terrain mimic mode
             WaterTransparency= nil,
@@ -312,14 +321,10 @@ end
 ----------------------------------------------------------------------
 -- Particles / decals / materials
 ----------------------------------------------------------------------
---[[
-    FIX 3 (APPLIED):
-    Added 'Sparkles' to the isEmitter check.
-]]
 local function isEmitter(inst)
     return inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
         or inst:IsA("Fire") or inst:IsA("Smoke")
-        or inst:IsA("Sparkles") -- NEW
+        or inst:IsA("Sparkles")
 end
 
 -- Reversible STOP
@@ -405,10 +410,6 @@ local function stopEmitter(inst)
         end)
         Variables.Maids.EmitterGuards:GiveTask(c4)
     
-    --[[
-        FIX 3 (APPLIED):
-        Added 'Sparkles' handler.
-    ]]
     elseif inst:IsA("Sparkles") then
         storeOnce(Variables.Snapshot.EmitterProps, inst, {
             Class   = "Sparkles",
@@ -446,10 +447,6 @@ local function restoreEmitters()
                 elseif props.Class == "Beam" then
                     emitter.Transparency = props.Transparency
                     emitter.Enabled      = props.Enabled
-                --[[
-                    FIX 3 (APPLIED):
-                    Added 'Sparkles' restoration.
-                ]]
                 elseif props.Class == "Sparkles" then
                     emitter.Enabled = props.Enabled
                 end
@@ -543,11 +540,6 @@ local function nukeTexturesIrreversible(inst)
     elseif inst:IsA("ShirtGraphic") then
         pcall(function() inst.Graphic = "" end)
 
-    --[[
-        FIX 2 (APPLIED):
-        Added a generic 'BasePart' check to force all
-        other parts (like regular Parts) to SmoothPlastic.
-    ]]
     elseif inst:IsA("BasePart") then -- Catches regular Parts, etc.
         pcall(function() inst.Material = Enum.Material.SmoothPlastic end)
 
@@ -690,6 +682,10 @@ local function snapshotLighting()
         OutdoorAmbient          = L.OutdoorAmbient,
         EnvironmentDiffuseScale = L.EnvironmentDiffuseScale,
         EnvironmentSpecularScale= L.EnvironmentSpecularScale,
+        -- NEW: Snapshot fog
+        FogStart                = L.FogStart,
+        FogEnd                  = L.FogEnd,
+        FogColor                = L.FogColor,
     }
 end
 
@@ -710,12 +706,28 @@ local function applyLowLighting()
     end)
 end
 
-local function scheduleApplyLowLighting()
+-- NEW: Fog removal function
+local function applyRemoveFog()
+    pcall(function()
+        RbxService.Lighting.FogStart = 999998
+        RbxService.Lighting.FogEnd = 999999
+    end)
+end
+
+-- NEW: Renamed function
+local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
     task.defer(function()
-        if Variables.Config.Enabled and not Variables.Runtime.cancelRequested and (Variables.Config.GraySky or Variables.Config.FullBright) then
-            applyLowLighting()
+        -- Check master enabled flag first
+        if Variables.Config.Enabled and not Variables.Runtime.cancelRequested then
+            if (Variables.Config.GraySky or Variables.Config.FullBright) then
+                applyLowLighting()
+            end
+            -- NEW: Add fog check
+            if Variables.Config.RemoveFog then
+                applyRemoveFog()
+            end
         end
         Variables.Runtime.LightingApplyScheduled = false
     end)
@@ -916,11 +928,6 @@ local function applyWaterReplacement()
             Reflectance = source.Reflectance,
             CastShadow  = source.CastShadow
         })
-        --[[
-            FIX 1 (APPLIED):
-            Also set 'Reflectance' to 0 to hide the water
-            surface, as seen in your screenshot.
-        ]]
         pcall(function()
             source.Transparency = 1
             source.Reflectance = 0
@@ -1095,6 +1102,12 @@ local function buildWatchers()
     -- Lighting stabilization
     Variables.Maids.Watchers:GiveTask(RbxService.Lighting.ChildAdded:Connect(function(child)
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
+        
+        -- NEW: Handle RemoveSkybox
+        if Variables.Config.RemoveSkybox and child:IsA("Sky") then
+            pcall(function() child:Destroy() end) -- Destroy, don't snapshot, as it was added *after* start
+        end
+
         if Variables.Config.DisablePostEffects and (
             child:IsA("BlurEffect") or child:IsA("SunRaysEffect") or
             child:IsA("ColorCorrectionEffect") or child:IsA("BloomEffect") or
@@ -1103,16 +1116,15 @@ local function buildWatchers()
             storeOnce(Variables.Snapshot.PostEffects, child, child.Enabled)
             pcall(function() child.Enabled = false end)
         end
-        if Variables.Config.GraySky or Variables.Config.FullBright then
-            scheduleApplyLowLighting()
-        end
+
+        -- NEW: Renamed function
+        scheduleApplyLighting()
     end))
 
     Variables.Maids.Watchers:GiveTask(RbxService.Lighting.Changed:Connect(function()
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
-        if Variables.Config.GraySky or Variables.Config.FullBright then
-            scheduleApplyLowLighting()
-        end
+        -- NEW: Renamed function
+        scheduleApplyLighting()
     end))
 end
 
@@ -1178,10 +1190,6 @@ local function applyAll()
     end
 
     if Variables.Config.NukeTextures and not Variables.Irreversible.TexturesNuked then
-        --[[
-            FIX 2 (APPLIED):
-            Nuke MaterialService properties first.
-        ]]
         pcall(function()
             if RbxService.MaterialService then
                 RbxService.MaterialService.FallbackMaterial = Enum.Material.SmoothPlastic
@@ -1213,9 +1221,18 @@ local function applyAll()
     if Variables.Config.RemoveGrassDecoration then terrainDecorationSet(true) end
     if Variables.Config.DisablePostEffects   then disablePostEffects() end
 
-    if Variables.Config.GraySky or Variables.Config.FullBright then
-        scheduleApplyLowLighting()
+    -- NEW: Apply Skybox removal
+    if Variables.Config.RemoveSkybox then
+        for _, child in ipairs(RbxService.Lighting:GetChildren()) do
+            if child:IsA("Sky") then
+                table.insert(Variables.Snapshot.Skyboxes, child)
+                child.Parent = nil
+            end
+        end
     end
+
+    -- NEW: Renamed function
+    scheduleApplyLighting()
 
     if Variables.Config.UseMinimumQuality then applyQualityMinimum() end
     if Variables.Config.ReplaceWaterWithBlock then applyWaterReplacement() end
@@ -1262,6 +1279,10 @@ local function restoreAll()
             L.OutdoorAmbient           = P.OutdoorAmbient
             L.EnvironmentDiffuseScale  = P.EnvironmentDiffuseScale
             L.EnvironmentSpecularScale = P.EnvironmentSpecularScale
+            -- NEW: Restore fog
+            L.FogStart                 = P.FogStart
+            L.FogEnd                   = P.FogEnd
+            L.FogColor                 = P.FogColor
         end
         if Variables.Config.ForceClearBlurOnRestore then
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
@@ -1270,6 +1291,12 @@ local function restoreAll()
         end
     end)
     restorePostEffects()
+
+    -- NEW: Restore Skyboxes
+    for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
+        if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
+    end
+    Variables.Snapshot.Skyboxes = {}
 
     if Variables.Snapshot.TerrainDecoration ~= nil then
         local terrain = RbxService.Workspace:FindFirstChildOfClass("Terrain")
@@ -1412,6 +1439,8 @@ group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=
 group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
 group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
 group:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
+group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) -- NEW
+group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox }) -- NEW
 group:AddToggle("OptMinQuality",     { Text="Use Minimum Quality",      Default=Variables.Config.UseMinimumQuality })
 group:AddToggle("OptClearBlurRestore",{ Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
 
@@ -1642,25 +1671,75 @@ end)
 
 bindToggle("OptGraySky", function(v)
     Variables.Config.GraySky = v
-    if Variables.Config.Enabled then scheduleApplyLowLighting(); buildWatchers() end
+    if Variables.Config.Enabled then scheduleApplyLighting(); buildWatchers() end
 end)
 
 bindOption("OptGraySkyShade", function(v)
     v = math.floor(tonumber(v) or Variables.Config.GraySkyShade)
     Variables.Config.GraySkyShade = v
-    if Variables.Config.Enabled and Variables.Config.GraySky then scheduleApplyLowLighting() end
+    if Variables.Config.Enabled and Variables.Config.GraySky then scheduleApplyLighting() end
 end)
 
 bindToggle("OptFullBright", function(v)
     Variables.Config.FullBright = v
-    if Variables.Config.Enabled then scheduleApplyLowLighting(); buildWatchers() end
+    if Variables.Config.Enabled then scheduleApplyLighting(); buildWatchers() end
 end)
 
 bindOption("OptFullBrightLvl", function(v)
     v = math.floor(tonumber(v) or Variables.Config.FullBrightLevel)
     Variables.Config.FullBrightLevel = v
-    if Variables.Config.Enabled and Variables.Config.FullBright then scheduleApplyLowLighting() end
+    if Variables.Config.Enabled and Variables.Config.FullBright then scheduleApplyLighting() end
 end)
+
+-- NEW: Bind OptNoFog
+bindToggle("OptNoFog", function(v)
+    Variables.Config.RemoveFog = v
+    if Variables.Config.Enabled then
+        if v then
+            applyRemoveFog()
+        else
+            -- Restore just the fog
+            pcall(function()
+                local P = Variables.Snapshot.LightingProps
+                if P and P.FogStart ~= nil then
+                    local L = RbxService.Lighting
+                    L.FogStart = P.FogStart
+                    L.FogEnd = P.FogEnd
+                    L.FogColor = P.FogColor
+                end
+            end)
+        end
+        buildWatchers() -- Re-arm the lighting watcher
+    end
+end)
+
+-- NEW: Bind OptNoSky
+bindToggle("OptNoSky", function(v)
+    Variables.Config.RemoveSkybox = v
+    if Variables.Config.Enabled then
+        if v then
+            -- Apply: Find all current skyboxes, snapshot, and remove
+            local currentSkies = {}
+            for _, child in ipairs(RbxService.Lighting:GetChildren()) do
+                if child:IsA("Sky") then
+                    table.insert(currentSkies, child)
+                end
+            end
+            for _, sky in ipairs(currentSkies) do
+                table.insert(Variables.Snapshot.Skyboxes, sky)
+                sky.Parent = nil
+            end
+        else
+            -- Restore: Put back the skyboxes we took
+            for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
+                if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
+            end
+            Variables.Snapshot.Skyboxes = {}
+        end
+        buildWatchers() -- Re-arm the childadded watcher
+    end
+end)
+
 
 bindToggle("OptMinQuality", function(v)
     Variables.Config.UseMinimumQuality = v
