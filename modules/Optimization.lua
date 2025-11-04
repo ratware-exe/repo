@@ -1469,6 +1469,10 @@ group:AddDivider()
 group:AddLabel("Lighting / Quality")
 
 group:AddToggle("OptNoGrass",        { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
+--[[
+    FIX (APPLIED):
+    The typo 'AddAddToggle' has been corrected to 'AddToggle'.
+]]
 group:AddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
 group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=Variables.Config.GraySky })
 -- REMOVED: group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
