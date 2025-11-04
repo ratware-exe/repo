@@ -1,4 +1,4 @@
--- modules/VIPServerCommands.lua
+-- modules/vipservercommands.lua
 do
     return function(UI)
         local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
