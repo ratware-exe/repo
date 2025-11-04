@@ -1,7 +1,4 @@
 -- modules/clientnamespoofer.lua
--- Exact spoofing logic & hooks preserved from original script.
--- Repo style: RbxService, GlobalEnv.Signal, Maid, Variables { Maids, RunFlag, Backup }, Start/Stop, Misc groupbox.
-
 do
     return function(UI)
         -- === Services / Deps (match repo style like infinitezoom.lua) ======
@@ -11,12 +8,8 @@ do
         local Maid       = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
         local Players   = RbxService.Players
-        local TweenService = RbxService.TweenService
-        local UserInputService = RbxService.UserInputService
-        local RunService = RbxService.RunService
         local CoreGui   = RbxService.CoreGui
-
-        local lp = Players.LocalPlayer
+        local lp        = Players.LocalPlayer
 
         -- === State ==========================================================
         GlobalEnv.NameSpoofConfig = GlobalEnv.NameSpoofConfig or {
@@ -30,10 +23,7 @@ do
             Maids = { NameSpoofer = Maid.new() },
             RunFlag = false,
 
-            -- Player field backup
             Backup = nil, -- { Name, DisplayName, UserId, CharacterAppearanceId }
-
-            -- Per-instance original snapshots (weak keys)
             Snapshots = {
                 Text  = setmetatable({}, { __mode = "k" }),
                 Image = setmetatable({}, { __mode = "k" }),
@@ -48,10 +38,10 @@ do
             "http://www.roblox.com/asset/?id=0",
         }
 
-        -- We tag our own Obsidian inputs so spoofing skips them.
+        -- Tag our own inputs so spoofing skips them
         local OUR_INPUT_ATTR = "CNS_Ignore"
 
-        -- === Utils (original semantics) ====================================
+        -- === Utils ==========================================================
         local function esc(s) s = tostring(s or ""); return (s:gsub("(%W)","%%%1")) end
 
         local function killOldStandaloneUi()
@@ -82,18 +72,14 @@ do
             pcall(function() lp.CharacterAppearanceId = Variables.Backup.CharacterAppearanceId end)
         end
 
-        -- === Original replace functions (kept exactly) ======================
+        -- === Original replace functions (preserved) =========================
         local function replaceTextInObject(obj)
             if not obj or not obj.Parent then return end
             if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-                -- don't ever touch *our* Obsidian inputs
-                if obj:GetAttribute(OUR_INPUT_ATTR) then return end
-
-                -- Prevent duplicate processing (original behavior)
+                if obj:GetAttribute(OUR_INPUT_ATTR) then return end -- never touch our inputs
                 if obj:GetAttribute("TextReplaced") then return end
                 obj:SetAttribute("TextReplaced", true)
 
-                -- snapshot original text (for proper restore)
                 if Variables.Snapshots.Text[obj] == nil then
                     Variables.Snapshots.Text[obj] = tostring(obj.Text or "")
                 end
@@ -107,19 +93,18 @@ do
                     obj.Text = (text:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
                 end
 
-                -- keep spoofing on changes (original shape, with tiny delay)
                 local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
                     task.wait()
                     local newText = tostring(obj.Text or "")
 
-                    -- If the new text contains any *original* values, update baseline snapshot
+                    -- If new text contains originals, update baseline snapshot
                     if string.find(newText, Variables.Backup.Name, 1, true)
                     or string.find(newText, Variables.Backup.DisplayName, 1, true)
                     or string.find(newText, tostring(Variables.Backup.UserId), 1, true) then
                         Variables.Snapshots.Text[obj] = newText
                     end
 
-                    -- Re-apply spoof exactly the same way
+                    -- Re-apply spoof (same rules)
                     if string.find(newText, Variables.Backup.Name, 1, true) then
                         obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
                     elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
@@ -135,11 +120,9 @@ do
         local function replaceImageInObject(obj)
             if not obj or not obj.Parent then return end
             if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-                -- Prevent duplicate processing (original behavior)
                 if obj:GetAttribute("ImageReplaced") then return end
                 obj:SetAttribute("ImageReplaced", true)
 
-                -- snapshot original image (for restore)
                 if Variables.Snapshots.Image[obj] == nil then
                     Variables.Snapshots.Image[obj] = obj.Image
                 end
@@ -164,9 +147,8 @@ do
             end
         end
 
-        -- === Hooks (kept from original) =====================================
+        -- === Hooks (preserved from original) ================================
         local function setupGlobalHook()
-            -- Clear attributes so we can reprocess everything
             for _, obj in pairs(game:GetDescendants()) do
                 if obj:GetAttribute("TextReplaced") then obj:SetAttribute("TextReplaced", nil) end
                 if obj:GetAttribute("ImageReplaced") then obj:SetAttribute("ImageReplaced", nil) end
@@ -183,24 +165,20 @@ do
         end
 
         local function hookPlayerList()
-            local function processPlayerList()
-                local playerList = CoreGui:FindFirstChild("PlayerList")
-                if playerList then
-                    for _, obj in ipairs(playerList:GetDescendants()) do
-                        if obj:GetAttribute("TextReplaced") then obj:SetAttribute("TextReplaced", nil) end
-                        if obj:GetAttribute("ImageReplaced") then obj:SetAttribute("ImageReplaced", nil) end
-                        replaceTextInObject(obj)
-                        replaceImageInObject(obj)
-                    end
-                    local conn = playerList.DescendantAdded:Connect(function(obj)
-                        if not Variables.RunFlag then return end
-                        replaceTextInObject(obj)
-                        replaceImageInObject(obj)
-                    end)
-                    Variables.Maids.NameSpoofer:GiveTask(conn)
-                end
+            local playerList = CoreGui:FindFirstChild("PlayerList")
+            if not playerList then return end
+            for _, obj in ipairs(playerList:GetDescendants()) do
+                if obj:GetAttribute("TextReplaced") then obj:SetAttribute("TextReplaced", nil) end
+                if obj:GetAttribute("ImageReplaced") then obj:SetAttribute("ImageReplaced", nil) end
+                replaceTextInObject(obj)
+                replaceImageInObject(obj)
             end
-            processPlayerList()
+            local conn = playerList.DescendantAdded:Connect(function(obj)
+                if not Variables.RunFlag then return end
+                replaceTextInObject(obj)
+                replaceImageInObject(obj)
+            end)
+            Variables.Maids.NameSpoofer:GiveTask(conn)
         end
 
         local function hookCoreGui()
@@ -221,10 +199,9 @@ do
         -- === Lifecycle ======================================================
         local function Start()
             if Variables.RunFlag then
-                -- re-apply with latest config
+                -- re-apply with latest config using stored baselines
                 for obj, base in pairs(Variables.Snapshots.Text) do
                     if obj and obj.Parent then
-                        -- recompute from stored baseline using original rules
                         local t = base
                         if string.find(t, Variables.Backup.Name, 1, true) then
                             obj.Text = (t:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
@@ -243,7 +220,6 @@ do
             killOldStandaloneUi()
             ensureBackup()
 
-            -- initial sweep + hooks (exact scope preserved)
             setupGlobalHook()
             hookPlayerList()
             hookCoreGui()
@@ -257,7 +233,6 @@ do
             if not Variables.RunFlag then return end
             Variables.RunFlag = false
 
-            -- disconnect all watchers
             Variables.Maids.NameSpoofer:DoCleaning()
 
             -- restore texts/images from snapshots and clear attributes
@@ -280,7 +255,6 @@ do
                 Variables.Snapshots.Image[obj] = nil
             end
 
-            -- restore player fields
             restorePlayerFields()
         end
 
@@ -290,7 +264,7 @@ do
         groupbox:AddInput("CNS_DisplayName", {
             Text = "Fake Display Name",
             Default = tostring(Variables.Config.FakeDisplayName or ""),
-            Finished = false,          -- live update while typing
+            Finished = false, -- live update while typing
             Placeholder = "Display name...",
         })
         groupbox:AddInput("CNS_Username", {
@@ -315,7 +289,7 @@ do
             Default = false,
         })
 
-        -- Mark our inputs so spoofing never touches them + avoid clear-on-focus
+        -- Mark inputs so spoofing never touches them + avoid clear-on-focus
         pcall(function()
             if UI.Options.CNS_DisplayName.Textbox then
                 UI.Options.CNS_DisplayName.Textbox:SetAttribute(OUR_INPUT_ATTR, true)
@@ -331,7 +305,7 @@ do
             end
         end)
 
-        -- Inputs: live update & reapply if running
+        -- Inputs → live config (reapply if running)
         UI.Options.CNS_DisplayName:OnChanged(function(v)
             Variables.Config.FakeDisplayName = v
             if Variables.RunFlag then Start() end
@@ -339,7 +313,7 @@ do
         UI.Options.CNS_Username:OnChanged(function(v)
             Variables.Config.FakeName = v
             if Variables.RunFlag then Start() end
-        end))
+        end) -- <-- fixed: removed extra ')'
         UI.Options.CNS_UserId:OnChanged(function(v)
             local n = tonumber(v)
             if n then Variables.Config.FakeId = n end
