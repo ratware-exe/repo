@@ -133,6 +133,12 @@ do
 				if obj:GetAttribute("ImageReplaced") then return end
 				obj:SetAttribute("ImageReplaced", true)
 
+		local function replaceImageInObject(obj)
+			if not obj or not obj.Parent then return end
+			if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+				if obj:GetAttribute("ImageReplaced") then return end
+				obj:SetAttribute("ImageReplaced", true)
+
 				if Variables.Snapshots.Image[obj] == nil then
 					Variables.Snapshots.Image[obj] = obj.Image
 				end
@@ -341,7 +347,8 @@ do
 			Variables.Config.BlankProfilePicture = val and true or false
 			if Variables.RunFlag then Start() end
 		end)
-		UI.TCoggles.CNS_Enable:OnChanged(function(enabledState)
+		-- FIXED: Corrected UI.TCoggles to UI.Toggles
+		UI.Toggles.CNS_Enable:OnChanged(function(enabledState)
 			if enabledState then Start() else Stop() end
 		end)
 
