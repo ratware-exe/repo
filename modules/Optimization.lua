@@ -707,7 +707,7 @@ end
 
 --[[
     FIX (APPLIED):
-    - GraySky: Sets ambient to 128 gray, time to 12, and removes sky/clouds/atmosphere. Does NOT touch brightness.
+    - GraySky: Sets ambient to 128 gray, DOES NOT touch brightness/time, removes sky/clouds/atmosphere, and forces fog to gray.
     - FullBright: Sets brightness from slider, and ambient to 192 gray.
 ]]
 local function applyLowLighting()
@@ -725,10 +725,12 @@ local function applyLowLighting()
             -- FIX: Use snapshot brightness/time, not "1" or "12"
             local P = Variables.Snapshot.LightingProps
             if P then
+                -- Don't touch brightness, use snapshot
                 L.Brightness = P.Brightness
                 L.ClockTime = P.ClockTime
             else
-                L.Brightness = 1 -- Fallback if snapshot is missing
+                -- Fallback if no snapshot (this should not happen, but safe)
+                L.Brightness = 1 
                 L.ClockTime = 12
             end
             
@@ -745,10 +747,10 @@ local function applyLowLighting()
                 end
             end
             
-            -- NEW: Force fog to solid gray
+            -- NEW: Force fog to solid gray, but far away
             L.FogColor = color
             L.FogStart = 0
-            L.FogEnd = 0
+            L.FogEnd = 999999 -- FIX: Was 0, now high value
         
         elseif Variables.Config.FullBright then
             -- Full Bright mode: High brightness + bright ambient.
@@ -1467,10 +1469,6 @@ group:AddDivider()
 group:AddLabel("Lighting / Quality")
 
 group:AddToggle("OptNoGrass",        { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
---[[
-    FIX (APPLIED):
-    The typo 'AddAddToggle' has been corrected to 'AddToggle'.
-]]
 group:AddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
 group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=Variables.Config.GraySky })
 -- REMOVED: group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
@@ -1765,7 +1763,8 @@ bindToggle("OptNoSky", function(v)
             -- Apply: Find all current skyboxes, snapshot, and remove
             local currentSkies = {}
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
-                if child:IsA("Sky") or child:IsA("Clouds") or child:IsC("Atmosphere") then
+                -- FIX: IsA, not IsC
+                if child:IsA("Sky") or child:IsA("Clouds") or child:IsA("Atmosphere") then
                     table.insert(currentSkies, child)
                 end
             end
