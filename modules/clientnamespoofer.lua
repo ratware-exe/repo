@@ -310,16 +310,25 @@ do
 
 		-- Inputs → live config (reapply if running)
 		UI.Options.CNS_DisplayName:OnChanged(function(v)
+			v = v or "" -- Ensure v is not nil
 			Variables.Config.FakeDisplayName = v
 			if Variables.RunFlag then Start() end
 		end)
 		UI.Options.CNS_Username:OnChanged(function(v)
+			v = v or "" -- Ensure v is not nil
 			Variables.Config.FakeName = v
 			if Variables.RunFlag then Start() end
-		end) -- <-- fixed: removed extra ')'
+		end)
 		UI.Options.CNS_UserId:OnChanged(function(v)
+			v = v or "" -- Ensure v is not nil
 			local n = tonumber(v)
-			if n then Variables.Config.FakeId = n end
+			if n then -- Use number if valid
+				Variables.Config.FakeId = n
+			elseif v == "" then -- Use 0 if empty string
+				Variables.Config.FakeId = 0
+			end
+			-- If v is non-numeric (like "abc"), n is nil and v ~= "",
+			-- so the config just keeps its last valid value, which is fine.
 			if Variables.RunFlag then Start() end
 		end)
 		UI.Toggles.CNS_BlankPfp:OnChanged(function(val)
