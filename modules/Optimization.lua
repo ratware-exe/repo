@@ -1,40 +1,38 @@
 -- modules/Optimization.lua
-do
+do 
 return function(UI)
-    ------------------------------------------------------------------------
-    -- Bootstrap (Services / Maid / Signal)
-    ------------------------------------------------------------------------
-    local GlobalEnv = (getgenv and getgenv()) or _G
 
+    local GlobalEnv = (getgenv and getgenv()) or _G
+    
     GlobalEnv.Signal = GlobalEnv.Signal or loadstring(
         game:HttpGet(GlobalEnv.RepoBase .. "dependency/Signal.lua"),
         "@Signal.lua"
     )()
-
+    
     local Maid = loadstring(
         game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"),
         "@Maid.lua"
     )()
-
+    
     local RbxService = loadstring(
         game:HttpGet(GlobalEnv.RepoBase .. "dependency/Services.lua"),
         "@Services.lua"
     )()
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- State
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local Variables = {
         Maids = {
-            Optimization   = Maid.new(),
-            Watchers       = Maid.new(), -- workspace/gui/lighting watchers while enabled
-            EmitterGuards  = Maid.new(), -- reversible particle suppression
-            WaterWatch     = Maid.new(), -- tracks the live water source (part mode)
+            Optimization  = Maid.new(),
+            Watchers      = Maid.new(), -- workspace/gui/lighting watchers while enabled
+            EmitterGuards = Maid.new(), -- reversible particle suppression
+            WaterWatch    = Maid.new(), -- tracks the live water source (part mode)
         },
-
+    
         Config = {
             Enabled = false,
-
+    
             -- Rendering / UI
             DisableThreeDRendering = false,
             TargetFramesPerSecond  = 30,
@@ -43,101 +41,104 @@ return function(UI)
             DisableViewportFrames  = true,
             DisableVideoFrames     = true,
             MuteAllSounds          = true,
-
+    
             -- Animation / Motion
             PauseCharacterAnimations = true,
             PauseOtherAnimations     = true, -- client-driven only (NPC/UI/props)
             FreezeWorldAssemblies    = false,
-            DisableConstraints       = true, -- excludes Motor6D
-
+            DisableConstraints       = true,  -- excludes Motor6D
+    
             -- Physics / Network
-            AnchorCharacter            = true,
-            ReduceSimulationRadius     = true,
-            RemoveLocalNetworkOwnership= true,
-
+            AnchorCharacter         = true,
+            ReduceSimulationRadius  = true,
+            RemoveLocalNetworkOwnership = true,
+    
             -- Materials / Effects
-            StopParticleSystems      = true,   -- reversible
-            DestroyEmitters          = false,  -- irreversible
-            SmoothPlasticEverywhere  = true,   -- reversible
-            HideDecals               = true,   -- reversible
-            NukeTextures             = false,  -- irreversible
-
-            RemoveGrassDecoration    = true,
-            DisablePostEffects       = true,   -- Bloom/CC/DoF/SunRays/Blur
-            GraySky                  = true,
-            GraySkyShade             = 128,    -- 0..255
-            FullBright               = true,
-            FullBrightLevel          = 2,      -- 0..5
-            UseMinimumQuality        = true,
-            ForceClearBlurOnRestore  = true,
-
+            StopParticleSystems     = true,  -- reversible
+            DestroyEmitters         = false, -- irreversible
+            SmoothPlasticEverywhere = true,  -- reversible
+            HideDecals              = true,  -- reversible
+            NukeTextures            = false, -- irreversible
+    
+            RemoveGrassDecoration   = true,
+            DisablePostEffects      = true,  -- Bloom/CC/DoF/SunRays/Blur
+    
+            GraySky                 = true,
+            GraySkyShade            = 128,   -- 0..255
+            FullBright              = true,
+            FullBrightLevel         = 2,     -- 0..5
+    
+            UseMinimumQuality       = true,
+            ForceClearBlurOnRestore = true,
+    
             -- Water replacement (auto‑mimic)
-            ReplaceWaterWithBlock    = false,
-            WaterColor               = Color3.fromRGB(30, 85, 255),
-            WaterTransparency        = 0.25,   -- 0..1
+            ReplaceWaterWithBlock   = false,
+            WaterColor              = Color3.fromRGB(30, 85, 255),
+            WaterTransparency       = 0.25,  -- 0..1
         },
-
+    
         Snapshot = {
-            PlayerGuiEnabled   = {},   -- ScreenGui -> bool
-            CoreGuiState       = {},   -- CoreGuiType -> bool
-            ViewportVisible    = {},   -- ViewportFrame -> bool
-            VideoPlaying       = {},   -- VideoFrame -> bool
-            SoundProps         = {},   -- Sound -> {Volume, Playing}
-
-            AnimatorGuards     = {},   -- Animator -> {tracks={track->oldSpeed}, conns={...}}
-
-            ConstraintEnabled  = {},   -- Constraint -> bool
-            PartAnchored       = {},   -- BasePart -> bool
-            CharacterAnchored  = {},   -- BasePart -> bool
-
-            PartMaterial       = {},   -- BasePart -> {Material, Reflectance, CastShadow}
-            DecalTransparency  = {},   -- Decal/Texture -> number
-            EmitterProps       = {},   -- [reversible stop] per type snapshot (see StopEmitter)
-
-            LightingProps      = {},   -- saved lighting fields
-            PostEffects        = {},   -- Effect -> Enabled
-            TerrainDecoration  = nil,  -- bool
-            QualityLevel       = nil,  -- Enum.QualityLevel
-
-            TerrainWater = {           -- for Terrain mimic mode
-                WaterColor        = nil,
-                WaterTransparency = nil,
-                WaveSize          = nil,
-                WaveSpeed         = nil,
-                Reflectance       = nil,
+            PlayerGuiEnabled   = {},  -- ScreenGui -> bool
+            CoreGuiState       = {},  -- CoreGuiType -> bool
+            ViewportVisible    = {},  -- ViewportFrame -> bool
+            VideoPlaying       = {},  -- VideoFrame -> bool
+            SoundProps         = {},  -- Sound -> {Volume, Playing}
+    
+            AnimatorGuards     = {},  -- Animator -> {tracks={track->oldSpeed}, conns={...}}
+            ConstraintEnabled  = {},  -- Constraint -> bool
+            PartAnchored       = {},  -- BasePart -> bool
+            CharacterAnchored  = {},  -- BasePart -> bool
+            PartMaterial       = {},  -- BasePart -> {Material, Reflectance, CastShadow}
+            DecalTransparency  = {},  -- Decal/Texture -> number
+    
+            EmitterProps       = {},  -- [reversible stop] per type snapshot (see stopEmitter)
+    
+            LightingProps      = {},  -- saved lighting fields
+            PostEffects        = {},  -- Effect -> Enabled
+            TerrainDecoration  = nil, -- bool
+            QualityLevel       = nil, -- Enum.QualityLevel
+    
+            TerrainWater = {          -- for Terrain mimic mode
+                WaterColor       = nil,
+                WaterTransparency= nil,
+                WaveSize         = nil,
+                WaveSpeed        = nil,
+                Reflectance      = nil,
             },
         },
-
+    
         Irreversible = {
             EmittersDestroyed = false,
             TexturesNuked     = false,
         },
-
+    
         Runtime = {
             LightingApplyScheduled = false,
-            WaterProxyPart         = nil,
-            WaterMode              = "None",   -- "Part" | "Terrain" | "None"
-            WaterSource            = nil,      -- source BasePart (Part mode)
+            WaterProxyPart = nil,
+            WaterMode      = "None",  -- "Part" | "Terrain" | "None"
+            WaterSource    = nil,     -- source BasePart (part mode)
         },
     }
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Utilities
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function storeOnce(mapTable, key, value)
-        if mapTable[key] == nil then mapTable[key] = value end
-    end
-
-    local function eachDescendantChunked(root, predicateFn, actionFn)
-        local descendants = root:GetDescendants()
-        for index = 1, #descendants do
-            local instanceObject = descendants[index]
-            if Variables.Config.Enabled == false then break end
-            if predicateFn(instanceObject) then actionFn(instanceObject) end
-            if (index % 500) == 0 then task.wait() end
+        if mapTable[key] == nil then
+            mapTable[key] = value
         end
     end
-
+    
+    local function eachDescendantChunked(root, predicateFn, actionFn)
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local inst = descendants[i]
+            if Variables.Config.Enabled == false then break end
+            if predicateFn(inst) then actionFn(inst) end
+            if (i % 500) == 0 then task.wait() end
+        end
+    end
+    
     local function setFpsCap(targetFps)
         local candidates = {
             (getgenv and getgenv().setfpscap),
@@ -146,128 +147,127 @@ return function(UI)
             rawget(_G, "setfps"),
             rawget(_G, "setfps_max"),
         }
-        for candIndex = 1, #candidates do
-            local fn = candidates[candIndex]
+        for _, fn in ipairs(candidates) do
             if typeof(fn) == "function" then
                 if pcall(fn, targetFps) then return true end
             end
         end
         return false
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Sounds
-    ------------------------------------------------------------------------
-    local function guardSound(soundInstance)
-        if not soundInstance or not soundInstance:IsA("Sound") then return end
-        storeOnce(Variables.Snapshot.SoundProps, soundInstance, {
-            Volume  = (function() local ok,v = pcall(function() return soundInstance.Volume end) return ok and v or 1 end)(),
-            Playing = (function() local ok,v = pcall(function() return soundInstance.Playing end) return ok and v or false end)(),
+    ----------------------------------------------------------------------
+    local function guardSound(snd)
+        if not snd or not snd:IsA("Sound") then return end
+        storeOnce(Variables.Snapshot.SoundProps, snd, {
+            Volume  = (function() local ok,v=pcall(function() return snd.Volume end)  return ok and v or 1 end)(),
+            Playing = (function() local ok,v=pcall(function() return snd.Playing end) return ok and v or false end)(),
         })
-        pcall(function() soundInstance.Playing = false; soundInstance.Volume = 0 end)
-
-        local conn1 = soundInstance:GetPropertyChangedSignal("Volume"):Connect(function()
+        pcall(function() snd.Playing = false; snd.Volume = 0 end)
+    
+        local c1 = snd:GetPropertyChangedSignal("Volume"):Connect(function()
             if Variables.Config.Enabled and Variables.Config.MuteAllSounds then
-                pcall(function() soundInstance.Volume = 0 end)
+                pcall(function() snd.Volume = 0 end)
             end
         end)
-        local conn2 = soundInstance:GetPropertyChangedSignal("Playing"):Connect(function()
-            if Variables.Config.Enabled and Variables.Config.MuteAllSounds and soundInstance.Playing then
-                pcall(function() soundInstance.Playing = false end)
+        local c2 = snd:GetPropertyChangedSignal("Playing"):Connect(function()
+            if Variables.Config.Enabled and Variables.Config.MuteAllSounds and snd.Playing then
+                pcall(function() snd.Playing = false end)
             end
         end)
-        Variables.Maids.Watchers:GiveTask(conn1)
-        Variables.Maids.Watchers:GiveTask(conn2)
+        Variables.Maids.Watchers:GiveTask(c1)
+        Variables.Maids.Watchers:GiveTask(c2)
     end
-
+    
     local function applyMuteAllSounds()
         eachDescendantChunked(game, function(inst) return inst:IsA("Sound") end, guardSound)
     end
-
+    
     local function restoreSounds()
-        for soundInstance, props in pairs(Variables.Snapshot.SoundProps) do
+        for snd, props in pairs(Variables.Snapshot.SoundProps) do
             pcall(function()
-                if soundInstance and soundInstance.Parent then
-                    soundInstance.Volume  = props.Volume
-                    soundInstance.Playing = props.Playing
+                if snd and snd.Parent then
+                    snd.Volume  = props.Volume
+                    snd.Playing = props.Playing
                 end
             end)
-            Variables.Snapshot.SoundProps[soundInstance] = nil
+            Variables.Snapshot.SoundProps[snd] = nil
         end
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Animations (character + client-driven others)
-    ------------------------------------------------------------------------
-    local function shouldPauseAnimator(animatorObject)
-        local localPlayer = RbxService.Players.LocalPlayer
-        local character   = localPlayer and localPlayer.Character
-        local isCharacter = character and animatorObject:IsDescendantOf(character)
-        if isCharacter then
-            return Variables.Config.PauseCharacterAnimations
-        else
-            return Variables.Config.PauseOtherAnimations
-        end
+    ----------------------------------------------------------------------
+    local function shouldPauseAnimator(anim)
+        local lp = RbxService.Players.LocalPlayer
+        local char = lp and lp.Character
+        local isChar = char and anim:IsDescendantOf(char)
+        if isChar then return Variables.Config.PauseCharacterAnimations
+        else          return Variables.Config.PauseOtherAnimations end
     end
-
-    local function guardAnimator(animatorObject)
-        if not animatorObject or not animatorObject:IsA("Animator") then return end
-        if not shouldPauseAnimator(animatorObject) then return end
-        if Variables.Snapshot.AnimatorGuards[animatorObject] then return end
-
-        local guardBundle = { tracks = {}, conns = {} }
-        Variables.Snapshot.AnimatorGuards[animatorObject] = guardBundle
-
+    
+    local function guardAnimator(anim)
+        if not anim or not anim:IsA("Animator") then return end
+        if not shouldPauseAnimator(anim) then return end
+        if Variables.Snapshot.AnimatorGuards[anim] then return end
+    
+        local bundle = { tracks = {}, conns = {} }
+        Variables.Snapshot.AnimatorGuards[anim] = bundle
+    
         local function getTrackSpeed(track)
             local ok, s = pcall(function() return track.Speed end)
-            if ok and typeof(s) == "number" then return s end
-            return 1
+            return (ok and typeof(s) == "number") and s or 1
         end
-
+    
         local function freeze(track)
             if not track then return end
-            if guardBundle.tracks[track] == nil then
-                guardBundle.tracks[track] = getTrackSpeed(track)
+            if bundle.tracks[track] == nil then
+                bundle.tracks[track] = getTrackSpeed(track)
             end
             pcall(function() track:AdjustSpeed(0) end)
-            table.insert(guardBundle.conns, track.Stopped:Connect(function()
-                guardBundle.tracks[track] = nil
+            table.insert(bundle.conns, track.Stopped:Connect(function()
+                bundle.tracks[track] = nil
             end))
         end
-
-        local ok, list = pcall(function() return animatorObject:GetPlayingAnimationTracks() end)
-        if ok and list then for idx = 1, #list do freeze(list[idx]) end end
-
-        table.insert(guardBundle.conns, animatorObject.AnimationPlayed:Connect(function(newTrack)
-            if Variables.Config.Enabled and shouldPauseAnimator(animatorObject) then freeze(newTrack) end
+    
+        local ok, list = pcall(function() return anim:GetPlayingAnimationTracks() end)
+        if ok and list then
+            for i=1,#list do freeze(list[i]) end
+        end
+    
+        table.insert(bundle.conns, anim.AnimationPlayed:Connect(function(newTrack)
+            if Variables.Config.Enabled and shouldPauseAnimator(anim) then freeze(newTrack) end
         end))
-        table.insert(guardBundle.conns, animatorObject.AncestryChanged:Connect(function(_, parentNow)
+    
+        table.insert(bundle.conns, anim.AncestryChanged:Connect(function(_, parentNow)
             if parentNow == nil then
-                for i=1, #guardBundle.conns do local c = guardBundle.conns[i]; if c then c:Disconnect() end end
-                Variables.Snapshot.AnimatorGuards[animatorObject] = nil
+                for i=1,#bundle.conns do local c=bundle.conns[i]; if c then c:Disconnect() end end
+                Variables.Snapshot.AnimatorGuards[anim] = nil
             end
         end))
     end
-
+    
     local function releaseAnimatorGuards()
-        for animatorObject, bundle in pairs(Variables.Snapshot.AnimatorGuards) do
+        for anim, bundle in pairs(Variables.Snapshot.AnimatorGuards) do
             if bundle and bundle.tracks then
-                for trackObject, oldSpeed in pairs(bundle.tracks) do
-                    pcall(function() trackObject:AdjustSpeed(oldSpeed or 1) end)
+                for track, old in pairs(bundle.tracks) do
+                    pcall(function() track:AdjustSpeed(old or 1) end)
                 end
             end
             if bundle and bundle.conns then
-                for i=1, #bundle.conns do local c = bundle.conns[i]; if c then c:Disconnect() end end
+                for i=1,#bundle.conns do local c=bundle.conns[i]; if c then c:Disconnect() end end
             end
-            Variables.Snapshot.AnimatorGuards[animatorObject] = nil
+            Variables.Snapshot.AnimatorGuards[anim] = nil
         end
     end
-
+    
     local function toggleCharacterAnimateScripts(restoreBack)
-        local localPlayer = RbxService.Players.LocalPlayer
-        local character   = localPlayer and localPlayer.Character
-        if not character then return end
-        for _, child in ipairs(character:GetChildren()) do
+        local lp = RbxService.Players.LocalPlayer
+        local char = lp and lp.Character
+        if not char then return end
+    
+        for _, child in ipairs(char:GetChildren()) do
             if child:IsA("LocalScript") and child.Name == "Animate" then
                 if restoreBack then
                     local prev = Variables.Snapshot.AnimatePrev and Variables.Snapshot.AnimatePrev[child]
@@ -280,316 +280,331 @@ return function(UI)
             end
         end
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Particles / decals / materials
-    ------------------------------------------------------------------------
-    local function isEmitter(instanceObject)
-        return instanceObject:IsA("ParticleEmitter")
-            or instanceObject:IsA("Trail")
-            or instanceObject:IsA("Beam")
-            or instanceObject:IsA("Fire")
-            or instanceObject:IsA("Smoke")
+    ----------------------------------------------------------------------
+    local function isEmitter(inst)
+        return inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
+            or inst:IsA("Fire") or inst:IsA("Smoke")
     end
-
-    -- Reversible STOP (type-specific suppression so emitters do not “run forever” after restore)
-    local function stopEmitter(instanceObject)
-        if instanceObject:IsA("ParticleEmitter") then
-            storeOnce(Variables.Snapshot.EmitterProps, instanceObject, {
-                Class      = "ParticleEmitter",
-                Enabled    = instanceObject.Enabled,
-                Rate       = instanceObject.Rate,
+    
+    -- Reversible STOP (type-specific so emitters don't “run forever” after restore)
+    local function stopEmitter(inst)
+        if inst:IsA("ParticleEmitter") then
+            storeOnce(Variables.Snapshot.EmitterProps, inst, {
+                Class   = "ParticleEmitter",
+                Enabled = inst.Enabled,
+                Rate    = inst.Rate,
             })
-            pcall(function() instanceObject.Enabled = false; instanceObject.Rate = 0 end)
-
-            local connA = instanceObject:GetPropertyChangedSignal("Enabled"):Connect(function()
+            pcall(function() inst.Enabled = false; inst.Rate = 0 end)
+            local a = inst:GetPropertyChangedSignal("Enabled"):Connect(function()
                 if Variables.Config.Enabled and Variables.Config.StopParticleSystems then
-                    pcall(function() instanceObject.Enabled = false end)
+                    pcall(function() inst.Enabled = false end)
                 end
             end)
-            local connB = instanceObject:GetPropertyChangedSignal("Rate"):Connect(function()
+            local b = inst:GetPropertyChangedSignal("Rate"):Connect(function()
                 if Variables.Config.Enabled and Variables.Config.StopParticleSystems then
-                    pcall(function() instanceObject.Rate = 0 end)
+                    pcall(function() inst.Rate = 0 end)
                 end
             end)
-            local connC = instanceObject.AncestryChanged:Connect(function(_, parentNow)
-                if parentNow == nil then Variables.Snapshot.EmitterProps[instanceObject] = nil end
+            local c = inst.AncestryChanged:Connect(function(_, parentNow)
+                if parentNow == nil then Variables.Snapshot.EmitterProps[inst] = nil end
             end)
-            Variables.Maids.EmitterGuards:GiveTask(connA)
-            Variables.Maids.EmitterGuards:GiveTask(connB)
-            Variables.Maids.EmitterGuards:GiveTask(connC)
-
-        elseif instanceObject:IsA("Fire") then
-            storeOnce(Variables.Snapshot.EmitterProps, instanceObject, {
+            Variables.Maids.EmitterGuards:GiveTask(a)
+            Variables.Maids.EmitterGuards:GiveTask(b)
+            Variables.Maids.EmitterGuards:GiveTask(c)
+    
+        elseif inst:IsA("Fire") then
+            storeOnce(Variables.Snapshot.EmitterProps, inst, {
                 Class   = "Fire",
-                Enabled = instanceObject.Enabled,
-                Heat    = instanceObject.Heat,
-                Size    = instanceObject.Size,
+                Enabled = inst.Enabled,
+                Heat    = inst.Heat,
+                Size    = inst.Size,
             })
-            pcall(function() instanceObject.Enabled = false; instanceObject.Heat = 0; instanceObject.Size = 0 end)
-
-            local c1 = instanceObject:GetPropertyChangedSignal("Enabled"):Connect(function()
-                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then pcall(function() instanceObject.Enabled = false end) end
+            pcall(function() inst.Enabled = false; inst.Heat = 0; inst.Size = 0 end)
+            local c1 = inst:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then
+                    pcall(function() inst.Enabled = false end)
+                end
             end)
             Variables.Maids.EmitterGuards:GiveTask(c1)
-
-        elseif instanceObject:IsA("Smoke") then
-            storeOnce(Variables.Snapshot.EmitterProps, instanceObject, {
+    
+        elseif inst:IsA("Smoke") then
+            storeOnce(Variables.Snapshot.EmitterProps, inst, {
                 Class   = "Smoke",
-                Enabled = instanceObject.Enabled,
-                Opacity = instanceObject.Opacity,
-                Size    = instanceObject.Size,
+                Enabled = inst.Enabled,
+                Opacity = inst.Opacity,
+                Size    = inst.Size,
             })
-            pcall(function() instanceObject.Enabled = false; instanceObject.Opacity = 0; instanceObject.Size = 0 end)
-
-            local c2 = instanceObject:GetPropertyChangedSignal("Enabled"):Connect(function()
-                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then pcall(function() instanceObject.Enabled = false end) end
+            pcall(function() inst.Enabled = false; inst.Opacity = 0; inst.Size = 0 end)
+            local c2 = inst:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then
+                    pcall(function() inst.Enabled = false end)
+                end
             end)
             Variables.Maids.EmitterGuards:GiveTask(c2)
-
-        elseif instanceObject:IsA("Trail") then
-            storeOnce(Variables.Snapshot.EmitterProps, instanceObject, {
+    
+        elseif inst:IsA("Trail") then
+            storeOnce(Variables.Snapshot.EmitterProps, inst, {
                 Class   = "Trail",
-                Enabled = instanceObject.Enabled,
+                Enabled = inst.Enabled,
             })
-            pcall(function() instanceObject.Enabled = false end)
-
-            local c3 = instanceObject:GetPropertyChangedSignal("Enabled"):Connect(function()
-                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then pcall(function() instanceObject.Enabled = false end) end
+            pcall(function() inst.Enabled = false end)
+            local c3 = inst:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then
+                    pcall(function() inst.Enabled = false end)
+                end
             end)
             Variables.Maids.EmitterGuards:GiveTask(c3)
-
-        elseif instanceObject:IsA("Beam") then
-            storeOnce(Variables.Snapshot.EmitterProps, instanceObject, {
+    
+        elseif inst:IsA("Beam") then
+            storeOnce(Variables.Snapshot.EmitterProps, inst, {
                 Class        = "Beam",
-                Enabled      = instanceObject.Enabled,
-                Transparency = instanceObject.Transparency,
+                Enabled      = inst.Enabled,
+                Transparency = inst.Transparency,
             })
-            pcall(function() instanceObject.Enabled = false end)
-
-            local c4 = instanceObject:GetPropertyChangedSignal("Enabled"):Connect(function()
-                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then pcall(function() instanceObject.Enabled = false end) end
+            pcall(function() inst.Enabled = false end)
+            local c4 = inst:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if Variables.Config.Enabled and Variables.Config.StopParticleSystems then
+                    pcall(function() inst.Enabled = false end)
+                end
             end)
             Variables.Maids.EmitterGuards:GiveTask(c4)
         end
     end
-
+    
     local function restoreEmitters()
         Variables.Maids.EmitterGuards:DoCleaning()
-        for emitterInstance, props in pairs(Variables.Snapshot.EmitterProps) do
+        for emitter, props in pairs(Variables.Snapshot.EmitterProps) do
             pcall(function()
-                if emitterInstance and emitterInstance.Parent then
+                if emitter and emitter.Parent then
                     if props.Class == "ParticleEmitter" then
-                        emitterInstance.Rate    = props.Rate
-                        emitterInstance.Enabled = props.Enabled
+                        emitter.Rate    = props.Rate
+                        emitter.Enabled = props.Enabled
                     elseif props.Class == "Fire" then
-                        emitterInstance.Heat    = props.Heat
-                        emitterInstance.Size    = props.Size
-                        emitterInstance.Enabled = props.Enabled
+                        emitter.Heat    = props.Heat
+                        emitter.Size    = props.Size
+                        emitter.Enabled = props.Enabled
                     elseif props.Class == "Smoke" then
-                        emitterInstance.Opacity = props.Opacity
-                        emitterInstance.Size    = props.Size
-                        emitterInstance.Enabled = props.Enabled
+                        emitter.Opacity = props.Opacity
+                        emitter.Size    = props.Size
+                        emitter.Enabled = props.Enabled
                     elseif props.Class == "Trail" then
-                        emitterInstance.Enabled = props.Enabled
+                        emitter.Enabled = props.Enabled
                     elseif props.Class == "Beam" then
-                        emitterInstance.Transparency = props.Transparency
-                        emitterInstance.Enabled      = props.Enabled
+                        emitter.Transparency = props.Transparency
+                        emitter.Enabled      = props.Enabled
                     end
                 end
             end)
-            Variables.Snapshot.EmitterProps[emitterInstance] = nil
+            Variables.Snapshot.EmitterProps[emitter] = nil
         end
     end
-
-    local function destroyEmitterIrreversible(instanceObject)
-        if isEmitter(instanceObject) then pcall(function() instanceObject:Destroy() end) end
+    
+    local function destroyEmitterIrreversible(inst)
+        if isEmitter(inst) then pcall(function() inst:Destroy() end) end
     end
-
-    local function hideDecalOrTexture(instanceObject)
-        if instanceObject:IsA("Decal") or instanceObject:IsA("Texture") then
-            storeOnce(Variables.Snapshot.DecalTransparency, instanceObject,
-                (function() local ok,v = pcall(function() return instanceObject.Transparency end) return ok and v or 0 end)())
-            pcall(function() instanceObject.Transparency = 1 end)
+    
+    local function hideDecalOrTexture(inst)
+        if inst:IsA("Decal") or inst:IsA("Texture") then
+            storeOnce(Variables.Snapshot.DecalTransparency, inst,
+                (function() local ok,v=pcall(function() return inst.Transparency end) return ok and v or 0 end)()
+            )
+            pcall(function() inst.Transparency = 1 end)
         end
     end
-
+    
     local function restoreDecalsAndTextures()
-        for instanceObject, oldTransparency in pairs(Variables.Snapshot.DecalTransparency) do
+        for inst, old in pairs(Variables.Snapshot.DecalTransparency) do
             pcall(function()
-                if instanceObject and instanceObject.Parent then
-                    instanceObject.Transparency = oldTransparency
-                end
+                if inst and inst.Parent then inst.Transparency = old end
             end)
-            Variables.Snapshot.DecalTransparency[instanceObject] = nil
+            Variables.Snapshot.DecalTransparency[inst] = nil
         end
     end
-
-    local function smoothPlasticPart(instanceObject)
-        if not instanceObject:IsA("BasePart") then return end
-        local character = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer.Character
-        if character and instanceObject:IsDescendantOf(character) then return end
-        storeOnce(Variables.Snapshot.PartMaterial, instanceObject, {
-            Material    = instanceObject.Material,
-            Reflectance = instanceObject.Reflectance,
-            CastShadow  = instanceObject.CastShadow,
+    
+    local function smoothPlasticPart(inst)
+        if not inst:IsA("BasePart") then return end
+        local char = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer.Character
+        if char and inst:IsDescendantOf(char) then return end
+        storeOnce(Variables.Snapshot.PartMaterial, inst, {
+            Material    = inst.Material,
+            Reflectance = inst.Reflectance,
+            CastShadow  = inst.CastShadow,
         })
         pcall(function()
-            instanceObject.Material    = Enum.Material.SmoothPlastic
-            instanceObject.Reflectance = 0
-            instanceObject.CastShadow  = false
+            inst.Material    = Enum.Material.SmoothPlastic
+            inst.Reflectance = 0
+            inst.CastShadow  = false
         end)
     end
-
+    
     local function restorePartMaterials()
         local counter = 0
-        for partInstance, props in pairs(Variables.Snapshot.PartMaterial) do
+        for part, props in pairs(Variables.Snapshot.PartMaterial) do
             pcall(function()
-                if partInstance and partInstance.Parent then
-                    partInstance.Material    = props.Material
-                    partInstance.Reflectance = props.Reflectance
-                    partInstance.CastShadow  = props.CastShadow
+                if part and part.Parent then
+                    part.Material    = props.Material
+                    part.Reflectance = props.Reflectance
+                    part.CastShadow  = props.CastShadow
                 end
             end)
-            Variables.Snapshot.PartMaterial[partInstance] = nil
+            Variables.Snapshot.PartMaterial[part] = nil
             counter += 1
             if (counter % 500) == 0 then task.wait() end
         end
     end
-
+    
     -- Irreversible “Nuke”
-    local function nukeTexturesIrreversible(instanceObject)
-        if instanceObject:IsA("Decal") or instanceObject:IsA("Texture") then
-            pcall(function() instanceObject.Texture = "" end)
-            pcall(function() instanceObject:Destroy() end)
-        elseif instanceObject:IsA("SurfaceAppearance") then
-            pcall(function() instanceObject:Destroy() end)
-        elseif instanceObject:IsA("MeshPart") then
-            pcall(function() instanceObject.TextureID = "" end)
-            pcall(function() instanceObject.Material  = Enum.Material.SmoothPlastic end)
-        elseif instanceObject:IsA("SpecialMesh") then
-            pcall(function() instanceObject.TextureId = "" end)
-        elseif instanceObject:IsA("Shirt") then
-            pcall(function() instanceObject.ShirtTemplate = "" end)
-        elseif instanceObject:IsA("Pants") then
-            pcall(function() instanceObject.PantsTemplate = "" end)
-        elseif instanceObject:IsA("ShirtGraphic") then
-            pcall(function() instanceObject.Graphic = "" end)
+    local function nukeTexturesIrreversible(inst)
+        if inst:IsA("Decal") or inst:IsA("Texture") then
+            pcall(function() inst.Texture = "" end)
+            pcall(function() inst:Destroy() end)
+    
+        elseif inst:IsA("SurfaceAppearance") then
+            pcall(function() inst:Destroy() end)
+    
+        elseif inst:IsA("MeshPart") then
+            pcall(function() inst.TextureID = "" end)
+            pcall(function() inst.Material  = Enum.Material.SmoothPlastic end)
+    
+        elseif inst:IsA("SpecialMesh") then
+            pcall(function() inst.TextureId = "" end)
+    
+        elseif inst:IsA("Shirt") then
+            pcall(function() inst.ShirtTemplate = "" end)
+    
+        elseif inst:IsA("Pants") then
+            pcall(function() inst.PantsTemplate = "" end)
+    
+        elseif inst:IsA("ShirtGraphic") then
+            pcall(function() inst.Graphic = "" end)
+    
+        -- Optional UI carriers (so users really see “destroy textures” do something)
+        elseif inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
+            pcall(function() inst.Image = "" end)
         end
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Freeze world / constraints / net
-    ------------------------------------------------------------------------
-    local function freezeWorldPart(instanceObject)
-        if not instanceObject:IsA("BasePart") then return end
-        local character = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer.Character
-        if character and instanceObject:IsDescendantOf(character) then return end
-        if instanceObject:GetAttribute("WFYB_FrozenByOptimization") then return end
-        storeOnce(Variables.Snapshot.PartAnchored, instanceObject, instanceObject.Anchored)
+    ----------------------------------------------------------------------
+    local function freezeWorldPart(inst)
+        if not inst:IsA("BasePart") then return end
+        local char = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer.Character
+        if char and inst:IsDescendantOf(char) then return end
+        if inst:GetAttribute("WFYB_FrozenByOptimization") then return end
+    
+        storeOnce(Variables.Snapshot.PartAnchored, inst, inst.Anchored)
         pcall(function()
-            instanceObject.AssemblyLinearVelocity  = Vector3.new()
-            instanceObject.AssemblyAngularVelocity = Vector3.new()
-            instanceObject.Anchored = true
-            instanceObject:SetAttribute("WFYB_FrozenByOptimization", true)
+            inst.AssemblyLinearVelocity  = Vector3.new()
+            inst.AssemblyAngularVelocity = Vector3.new()
+            inst.Anchored = true
+            inst:SetAttribute("WFYB_FrozenByOptimization", true)
         end)
     end
-
+    
     local function restoreAnchoredParts()
         local counter = 0
-        for partInstance, wasAnchored in pairs(Variables.Snapshot.PartAnchored) do
+        for part, wasAnchored in pairs(Variables.Snapshot.PartAnchored) do
             pcall(function()
-                if partInstance and partInstance.Parent then
-                    partInstance.Anchored = wasAnchored and true or false
-                    partInstance:SetAttribute("WFYB_FrozenByOptimization", nil)
+                if part and part.Parent then
+                    part.Anchored = wasAnchored and true or false
+                    part:SetAttribute("WFYB_FrozenByOptimization", nil)
                 end
             end)
-            Variables.Snapshot.PartAnchored[partInstance] = nil
+            Variables.Snapshot.PartAnchored[part] = nil
             counter += 1
             if (counter % 500) == 0 then task.wait() end
         end
+    
         -- Safety sweep
-        eachDescendantChunked(RbxService.Workspace, function(x)
-            return x:IsA("BasePart") and x:GetAttribute("WFYB_FrozenByOptimization") == true
-        end, function(p)
-            pcall(function()
-                p:SetAttribute("WFYB_FrozenByOptimization", nil)
-                if Variables.Snapshot.PartAnchored[p] == nil then p.Anchored = false end
-            end)
-        end)
+        eachDescendantChunked(RbxService.Workspace,
+            function(x) return x:IsA("BasePart") and x:GetAttribute("WFYB_FrozenByOptimization") == true end,
+            function(p)
+                pcall(function()
+                    p:SetAttribute("WFYB_FrozenByOptimization", nil)
+                    if Variables.Snapshot.PartAnchored[p] == nil then p.Anchored = false end
+                end)
+            end
+        )
     end
-
+    
     local function disableWorldConstraints()
-        eachDescendantChunked(RbxService.Workspace, function(inst)
-            return inst:IsA("Constraint") and not inst:IsA("Motor6D")
-        end, function(constraintInstance)
-            storeOnce(Variables.Snapshot.ConstraintEnabled, constraintInstance, constraintInstance.Enabled)
-            pcall(function() constraintInstance.Enabled = false end)
-        end)
+        eachDescendantChunked(RbxService.Workspace,
+            function(inst) return inst:IsA("Constraint") and not inst:IsA("Motor6D") end,
+            function(c)
+                storeOnce(Variables.Snapshot.ConstraintEnabled, c, c.Enabled)
+                pcall(function() c.Enabled = false end)
+            end
+        )
     end
-
+    
     local function restoreWorldConstraints()
         local counter = 0
-        for constraintInstance, oldEnabled in pairs(Variables.Snapshot.ConstraintEnabled) do
+        for c, old in pairs(Variables.Snapshot.ConstraintEnabled) do
             pcall(function()
-                if constraintInstance and constraintInstance.Parent then
-                    constraintInstance.Enabled = oldEnabled and true or false
-                end
+                if c and c.Parent then c.Enabled = old and true or false end
             end)
-            Variables.Snapshot.ConstraintEnabled[constraintInstance] = nil
+            Variables.Snapshot.ConstraintEnabled[c] = nil
             counter += 1
             if (counter % 500) == 0 then task.wait() end
         end
     end
-
+    
     local function anchorCharacter(anchorOn)
-        local localPlayer = RbxService.Players.LocalPlayer
-        local character   = localPlayer and localPlayer.Character
-        if not character then return end
-        for _, descendant in ipairs(character:GetDescendants()) do
-            if descendant:IsA("BasePart") then
-                storeOnce(Variables.Snapshot.CharacterAnchored, descendant, descendant.Anchored)
-                pcall(function() descendant.Anchored = anchorOn and true or false end)
+        local lp = RbxService.Players.LocalPlayer
+        local char = lp and lp.Character
+        if not char then return end
+    
+        for _, d in ipairs(char:GetDescendants()) do
+            if d:IsA("BasePart") then
+                storeOnce(Variables.Snapshot.CharacterAnchored, d, d.Anchored)
+                pcall(function() d.Anchored = anchorOn and true or false end)
             end
         end
     end
-
+    
     local function reduceSimulationRadius()
         if not Variables.Config.ReduceSimulationRadius then return end
-        local localPlayer = RbxService.Players.LocalPlayer
-        if not localPlayer then return end
+        local lp = RbxService.Players.LocalPlayer
+        if not lp then return end
         local sethp = sethiddenproperty or set_hidden_property or set_hidden_prop
         if sethp then
             pcall(function()
-                sethp(localPlayer, "SimulationRadius", 0)
-                sethp(localPlayer, "MaxSimulationRadius", 0)
+                sethp(lp, "SimulationRadius", 0)
+                sethp(lp, "MaxSimulationRadius", 0)
             end)
         end
     end
-
+    
     local function removeNetOwnership()
         if not Variables.Config.RemoveLocalNetworkOwnership then return end
-        eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, function(partInstance)
-            pcall(function() if not partInstance.Anchored then partInstance:SetNetworkOwner(nil) end end)
-        end)
+        eachDescendantChunked(RbxService.Workspace,
+            function(inst) return inst:IsA("BasePart") end,
+            function(part)
+                pcall(function() if not part.Anchored then part:SetNetworkOwner(nil) end end)
+            end
+        )
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Lighting / PostFX / Grass
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function snapshotLighting()
         local L = RbxService.Lighting
         Variables.Snapshot.LightingProps = {
-            GlobalShadows = L.GlobalShadows,
-            Brightness    = L.Brightness,
-            ClockTime     = L.ClockTime,
-            Ambient       = L.Ambient,
-            OutdoorAmbient= L.OutdoorAmbient,
-            EnvironmentDiffuseScale  = L.EnvironmentDiffuseScale,
-            EnvironmentSpecularScale = L.EnvironmentSpecularScale,
+            GlobalShadows           = L.GlobalShadows,
+            Brightness              = L.Brightness,
+            ClockTime               = L.ClockTime,
+            Ambient                 = L.Ambient,
+            OutdoorAmbient          = L.OutdoorAmbient,
+            EnvironmentDiffuseScale = L.EnvironmentDiffuseScale,
+            EnvironmentSpecularScale= L.EnvironmentSpecularScale,
         }
     end
-
+    
     local function applyLowLighting()
         local L = RbxService.Lighting
         pcall(function()
@@ -600,13 +615,13 @@ return function(UI)
             if Variables.Config.GraySky then
                 local shade = math.clamp(Variables.Config.GraySkyShade, 0, 255)
                 local color = Color3.fromRGB(shade, shade, shade)
-                L.ClockTime      = 12
-                L.Ambient        = color
+                L.ClockTime = 12
+                L.Ambient = color
                 L.OutdoorAmbient = color
             end
         end)
     end
-
+    
     local function scheduleApplyLowLighting()
         if Variables.Runtime.LightingApplyScheduled then return end
         Variables.Runtime.LightingApplyScheduled = true
@@ -617,40 +632,51 @@ return function(UI)
             Variables.Runtime.LightingApplyScheduled = false
         end)
     end
-
+    
     local function disablePostEffects()
         local L = RbxService.Lighting
         for _, effect in ipairs(L:GetChildren()) do
-            if effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect")
-               or effect:IsA("BloomEffect") or effect:IsA("DepthOfFieldEffect") then
+            if effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect")
+            or effect:IsA("ColorCorrectionEffect") or effect:IsA("BloomEffect")
+            or effect:IsA("DepthOfFieldEffect") then
                 storeOnce(Variables.Snapshot.PostEffects, effect, effect.Enabled)
                 pcall(function() effect.Enabled = false end)
             end
         end
     end
-
+    
     local function restorePostEffects()
-        for effectInstance, wasEnabled in pairs(Variables.Snapshot.PostEffects) do
-            pcall(function() if effectInstance and effectInstance.Parent then effectInstance.Enabled = wasEnabled and true or false end end)
-            Variables.Snapshot.PostEffects[effectInstance] = nil
+        for eff, wasEnabled in pairs(Variables.Snapshot.PostEffects) do
+            pcall(function()
+                if eff and eff.Parent then eff.Enabled = wasEnabled and true or false end
+            end)
+            Variables.Snapshot.PostEffects[eff] = nil
         end
     end
-
+    
     local function terrainDecorationSet(disableOn)
         local terrain = RbxService.Workspace:FindFirstChildOfClass("Terrain")
         if not terrain then return end
+    
         if Variables.Snapshot.TerrainDecoration == nil then
             local ok, existing = pcall(function() return terrain.Decoration end)
             if ok then Variables.Snapshot.TerrainDecoration = existing end
         end
-        pcall(function() if typeof(terrain.Decoration) == "boolean" then terrain.Decoration = not disableOn end end)
+    
+        pcall(function()
+            if typeof(terrain.Decoration) == "boolean" then
+                terrain.Decoration = not disableOn
+            end
+        end)
+    
         if RbxService.MaterialService then
             pcall(function()
-                RbxService.MaterialService.FallbackMaterial = disableOn and Enum.Material.SmoothPlastic or Enum.Material.Plastic
+                RbxService.MaterialService.FallbackMaterial =
+                    disableOn and Enum.Material.SmoothPlastic or Enum.Material.Plastic
             end)
         end
     end
-
+    
     local function applyQualityMinimum()
         if Variables.Snapshot.QualityLevel == nil then
             local ok, level = pcall(function() return settings().Rendering.QualityLevel end)
@@ -658,37 +684,39 @@ return function(UI)
         end
         pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     end
-
+    
     local function restoreQuality()
         if Variables.Snapshot.QualityLevel ~= nil then
             pcall(function() settings().Rendering.QualityLevel = Variables.Snapshot.QualityLevel end)
             Variables.Snapshot.QualityLevel = nil
         end
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Viewport / VideoFrames and GUI hide/show
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function scanViewportAndVideo()
         local function scan(rootGui)
             if not rootGui then return end
-            eachDescendantChunked(rootGui, function(inst)
-                return inst:IsA("ViewportFrame") or inst:IsA("VideoFrame")
-            end, function(frame)
-                if frame:IsA("ViewportFrame") and Variables.Config.DisableViewportFrames then
-                    storeOnce(Variables.Snapshot.ViewportVisible, frame, frame.Visible)
-                    pcall(function() frame.Visible = false end)
-                elseif frame:IsA("VideoFrame") and Variables.Config.DisableVideoFrames then
-                    storeOnce(Variables.Snapshot.VideoPlaying, frame, frame.Playing)
-                    pcall(function() frame.Playing = false end)
+            eachDescendantChunked(rootGui,
+                function(inst) return inst:IsA("ViewportFrame") or inst:IsA("VideoFrame") end,
+                function(frame)
+                    if frame:IsA("ViewportFrame") and Variables.Config.DisableViewportFrames then
+                        storeOnce(Variables.Snapshot.ViewportVisible, frame, frame.Visible)
+                        pcall(function() frame.Visible = false end)
+                    elseif frame:IsA("VideoFrame") and Variables.Config.DisableVideoFrames then
+                        storeOnce(Variables.Snapshot.VideoPlaying, frame, frame.Playing)
+                        pcall(function() frame.Playing = false end)
+                    end
                 end
-            end)
+            )
         end
-        local playerGui = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-        scan(playerGui)
+    
+        local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        scan(pg)
         scan(RbxService.CoreGui)
     end
-
+    
     local function restoreViewportAndVideo()
         for frame, wasVisible in pairs(Variables.Snapshot.ViewportVisible) do
             pcall(function() if frame and frame.Parent then frame.Visible = wasVisible and true or false end end)
@@ -699,42 +727,46 @@ return function(UI)
             Variables.Snapshot.VideoPlaying[frame] = nil
         end
     end
-
+    
     local function hidePlayerGuiAll()
-        local playerGui = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-        if not playerGui then return end
-        for _, screenGui in ipairs(playerGui:GetChildren()) do
-            if screenGui:IsA("ScreenGui") then
-                storeOnce(Variables.Snapshot.PlayerGuiEnabled, screenGui, screenGui.Enabled)
-                pcall(function() screenGui.Enabled = false end)
+        local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if not pg then return end
+        for _, gui in ipairs(pg:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                storeOnce(Variables.Snapshot.PlayerGuiEnabled, gui, gui.Enabled)
+                pcall(function() gui.Enabled = false end)
             end
         end
     end
-
+    
     local function restorePlayerGuiAll()
-        for screenGui, wasEnabled in pairs(Variables.Snapshot.PlayerGuiEnabled) do
-            pcall(function() if screenGui and screenGui.Parent then screenGui.Enabled = wasEnabled and true or false end end)
-            Variables.Snapshot.PlayerGuiEnabled[screenGui] = nil
+        for gui, wasEnabled in pairs(Variables.Snapshot.PlayerGuiEnabled) do
+            pcall(function() if gui and gui.Parent then gui.Enabled = wasEnabled and true or false end end)
+            Variables.Snapshot.PlayerGuiEnabled[gui] = nil
         end
     end
-
+    
     local function hideCoreGuiAll(hideOn)
         if Variables.Snapshot.CoreGuiState["__snap__"] == nil then
             for _, coreType in ipairs({
-                Enum.CoreGuiType.Chat, Enum.CoreGuiType.Backpack, Enum.CoreGuiType.EmotesMenu,
-                Enum.CoreGuiType.PlayerList, Enum.CoreGuiType.Health,
+                Enum.CoreGuiType.Chat,
+                Enum.CoreGuiType.Backpack,
+                Enum.CoreGuiType.EmotesMenu,
+                Enum.CoreGuiType.PlayerList,
+                Enum.CoreGuiType.Health,
             }) do
                 Variables.Snapshot.CoreGuiState[coreType] = RbxService.StarterGui:GetCoreGuiEnabled(coreType)
             end
             Variables.Snapshot.CoreGuiState["__snap__"] = true
         end
+    
         for coreType, _ in pairs(Variables.Snapshot.CoreGuiState) do
             if typeof(coreType) == "EnumItem" then
                 pcall(function() RbxService.StarterGui:SetCoreGuiEnabled(coreType, not hideOn) end)
             end
         end
     end
-
+    
     local function restoreCoreGuiAll()
         for coreType, wasEnabled in pairs(Variables.Snapshot.CoreGuiState) do
             if typeof(coreType) == "EnumItem" then
@@ -743,71 +775,68 @@ return function(UI)
         end
         Variables.Snapshot.CoreGuiState = {}
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Water Replacement (Auto‑mimic)
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function findWaterSource()
         -- Try: largest BasePart with Material = Water
         local largestPart, largestVolume = nil, 0
         for _, inst in ipairs(RbxService.Workspace:GetDescendants()) do
             if inst:IsA("BasePart") and inst.Material == Enum.Material.Water then
                 local vol = inst.Size.X * inst.Size.Y * inst.Size.Z
-                if vol > largestVolume then
-                    largestVolume = vol
-                    largestPart   = inst
-                end
+                if vol > largestVolume then largestVolume, largestPart = vol, inst end
             end
         end
-        if largestPart then
-            return "Part", largestPart
-        end
+        if largestPart then return "Part", largestPart end
+    
         -- Fallback: Terrain water (mimic by setting Terrain properties)
         local terrain = RbxService.Workspace:FindFirstChildOfClass("Terrain")
-        if terrain then
-            return "Terrain", terrain
-        end
+        if terrain then return "Terrain", terrain end
+    
         return "None", nil
     end
-
+    
     local function applyWaterReplacement()
         Variables.Maids.WaterWatch:DoCleaning()
         Variables.Runtime.WaterMode, Variables.Runtime.WaterSource = findWaterSource()
-
+    
         if Variables.Runtime.WaterMode == "Part" and Variables.Runtime.WaterSource then
-            -- Hide actual water part (make it invisible but keep physics), and overlay a proxy SmoothPlastic block that follows it.
             local source = Variables.Runtime.WaterSource
-
+    
             if Variables.Runtime.WaterProxyPart and Variables.Runtime.WaterProxyPart.Parent then
                 pcall(function() Variables.Runtime.WaterProxyPart:Destroy() end)
                 Variables.Runtime.WaterProxyPart = nil
             end
-
+    
             local proxy = Instance.new("Part")
-            proxy.Name        = "WFYB_WaterProxy"
-            proxy.Anchored    = true
-            proxy.CanCollide  = false
-            proxy.Material    = Enum.Material.SmoothPlastic
-            proxy.Color       = Variables.Config.WaterColor
-            proxy.Transparency= math.clamp(Variables.Config.WaterTransparency, 0, 1)
-            proxy.Size        = source.Size
-            proxy.CFrame      = source.CFrame
-            proxy.Parent      = RbxService.Workspace
+            proxy.Name = "WFYB_WaterProxy"
+            proxy.Anchored = true
+            proxy.CanCollide = false
+            proxy.Material = Enum.Material.SmoothPlastic
+            proxy.Color = Variables.Config.WaterColor
+            proxy.Transparency = math.clamp(Variables.Config.WaterTransparency, 0, 1)
+            proxy.Size = source.Size
+            proxy.CFrame = source.CFrame
+            proxy.Parent = RbxService.Workspace
             Variables.Runtime.WaterProxyPart = proxy
-
-            -- Make the original visual invisible (but not messing physics)
-            local sourceInitialTransparency = source.Transparency
-            storeOnce(Variables.Snapshot.PartMaterial, source, { Material = source.Material, Reflectance = source.Reflectance, CastShadow = source.CastShadow })
+    
+            -- Make the original visual invisible (but keep physics)
+            storeOnce(Variables.Snapshot.PartMaterial, source, {
+                Material    = source.Material,
+                Reflectance = source.Reflectance,
+                CastShadow  = source.CastShadow
+            })
             pcall(function() source.Transparency = 1 end)
-
+    
             local function syncProxy()
                 if proxy and proxy.Parent and source and source.Parent then
-                    proxy.Size   = source.Size
+                    proxy.Size = source.Size
                     proxy.CFrame = source.CFrame
                 end
             end
-
             syncProxy()
+    
             local c1 = source:GetPropertyChangedSignal("CFrame"):Connect(syncProxy)
             local c2 = source:GetPropertyChangedSignal("Size"):Connect(syncProxy)
             local c3 = source.AncestryChanged:Connect(function(_, parentNow)
@@ -820,7 +849,7 @@ return function(UI)
             Variables.Maids.WaterWatch:GiveTask(c1)
             Variables.Maids.WaterWatch:GiveTask(c2)
             Variables.Maids.WaterWatch:GiveTask(c3)
-
+    
         elseif Variables.Runtime.WaterMode == "Terrain" then
             local terrain = Variables.Runtime.WaterSource
             if terrain then
@@ -844,6 +873,7 @@ return function(UI)
                     local okR, rf = pcall(function() return terrain.WaterReflectance end)
                     if okR then Variables.Snapshot.TerrainWater.Reflectance = rf end
                 end
+    
                 pcall(function()
                     terrain.WaterColor        = Variables.Config.WaterColor
                     terrain.WaterTransparency = math.clamp(Variables.Config.WaterTransparency, 0, 1)
@@ -854,82 +884,95 @@ return function(UI)
             end
         end
     end
-
+    
     local function removeWaterReplacement()
         Variables.Maids.WaterWatch:DoCleaning()
+    
         if Variables.Runtime.WaterProxyPart then
             pcall(function() Variables.Runtime.WaterProxyPart:Destroy() end)
             Variables.Runtime.WaterProxyPart = nil
         end
-
+    
         if Variables.Runtime.WaterMode == "Part" and Variables.Runtime.WaterSource then
-            -- Restore original water part transparency (and other saved part props if any)
             local source = Variables.Runtime.WaterSource
-            local saved  = Variables.Snapshot.PartMaterial[source]
-            if saved then
-                pcall(function()
-                    if source and source.Parent then
-                        -- Only restore material fields; transparency was set separately
+            local saved = Variables.Snapshot.PartMaterial[source]
+            pcall(function()
+                if source and source.Parent then
+                    if saved then
                         source.Material    = saved.Material
                         source.Reflectance = saved.Reflectance
                         source.CastShadow  = saved.CastShadow
-                        source.Transparency = 0 -- show it again
                     end
-                end)
-                Variables.Snapshot.PartMaterial[source] = nil
-            else
-                pcall(function() if source and source.Parent then source.Transparency = 0 end end)
-            end
+                    source.Transparency = 0
+                end
+            end)
+            Variables.Snapshot.PartMaterial[source] = nil
+    
         elseif Variables.Runtime.WaterMode == "Terrain" and Variables.Runtime.WaterSource then
             local terrain = Variables.Runtime.WaterSource
             local snap = Variables.Snapshot.TerrainWater
             pcall(function()
                 if terrain then
-                    if snap.WaterColor then        terrain.WaterColor        = snap.WaterColor end
+                    if snap.WaterColor        then terrain.WaterColor        = snap.WaterColor        end
                     if snap.WaterTransparency then terrain.WaterTransparency = snap.WaterTransparency end
-                    if snap.WaveSize then          terrain.WaterWaveSize     = snap.WaveSize end
-                    if snap.WaveSpeed then         terrain.WaterWaveSpeed    = snap.WaveSpeed end
-                    if snap.Reflectance then       terrain.WaterReflectance  = snap.Reflectance end
+                    if snap.WaveSize          then terrain.WaterWaveSize     = snap.WaveSize          end
+                    if snap.WaveSpeed         then terrain.WaterWaveSpeed    = snap.WaveSpeed         end
+                    if snap.Reflectance       then terrain.WaterReflectance  = snap.Reflectance       end
                 end
             end)
-            Variables.Snapshot.TerrainWater = { WaterColor=nil, WaterTransparency=nil, WaveSize=nil, WaveSpeed=nil, Reflectance=nil }
+            Variables.Snapshot.TerrainWater = {
+                WaterColor=nil, WaterTransparency=nil, WaveSize=nil, WaveSpeed=nil, Reflectance=nil
+            }
         end
-
+    
         Variables.Runtime.WaterMode   = "None"
         Variables.Runtime.WaterSource = nil
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Watchers (workspace/gui/lighting)
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function buildWatchers()
         Variables.Maids.Watchers:DoCleaning()
-
-        -- Workspace: emitters, parts, constraints, animators, sounds
+    
+        -- Workspace: emitters, parts, constraints, animators, sounds, textures
         Variables.Maids.Watchers:GiveTask(RbxService.Workspace.DescendantAdded:Connect(function(inst)
             if not Variables.Config.Enabled then return end
-
+    
             if Variables.Config.DestroyEmitters and isEmitter(inst) then
                 destroyEmitterIrreversible(inst)
             elseif Variables.Config.StopParticleSystems and isEmitter(inst) then
                 stopEmitter(inst)
             end
-
-            if Variables.Config.SmoothPlasticEverywhere and inst:IsA("BasePart") then smoothPlasticPart(inst) end
-            if Variables.Config.HideDecals and (inst:IsA("Decal") or inst:IsA("Texture")) then hideDecalOrTexture(inst) end
-            if Variables.Config.FreezeWorldAssemblies and inst:IsA("BasePart") then freezeWorldPart(inst) end
+    
+            if Variables.Config.NukeTextures then -- NEW: nuke newcomers while enabled
+                nukeTexturesIrreversible(inst)
+            elseif Variables.Config.HideDecals and (inst:IsA("Decal") or inst:IsA("Texture")) then
+                hideDecalOrTexture(inst)
+            end
+    
+            if Variables.Config.SmoothPlasticEverywhere and inst:IsA("BasePart") then
+                smoothPlasticPart(inst)
+            end
+    
+            if Variables.Config.FreezeWorldAssemblies and inst:IsA("BasePart") then
+                freezeWorldPart(inst)
+            end
+    
             if Variables.Config.RemoveLocalNetworkOwnership and inst:IsA("BasePart") then
                 pcall(function() if not inst.Anchored then inst:SetNetworkOwner(nil) end end)
             end
+    
             if Variables.Config.MuteAllSounds and inst:IsA("Sound") then guardSound(inst) end
             if inst:IsA("Animator") then guardAnimator(inst) end
         end))
-
-        -- PlayerGui & CoreGui: Viewport/Video/Sound/Animator
+    
+        -- PlayerGui & CoreGui: Viewport/Video/Sound/Animator (+ optional texture nuking for UI)
         local function guiStream(root)
             if not root then return end
             Variables.Maids.Watchers:GiveTask(root.DescendantAdded:Connect(function(inst)
                 if not Variables.Config.Enabled then return end
+    
                 if Variables.Config.DisableViewportFrames and inst:IsA("ViewportFrame") then
                     storeOnce(Variables.Snapshot.ViewportVisible, inst, inst.Visible)
                     pcall(function() inst.Visible = false end)
@@ -937,119 +980,161 @@ return function(UI)
                     storeOnce(Variables.Snapshot.VideoPlaying, inst, inst.Playing)
                     pcall(function() inst.Playing = false end)
                 end
+    
+                if Variables.Config.NukeTextures and (inst:IsA("ImageLabel") or inst:IsA("ImageButton")) then
+                    pcall(function() inst.Image = "" end)
+                end
+    
                 if Variables.Config.MuteAllSounds and inst:IsA("Sound") then guardSound(inst) end
                 if inst:IsA("Animator") then guardAnimator(inst) end
             end))
         end
+    
         local pg = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-        guiStream(pg); guiStream(RbxService.CoreGui)
-
-        -- Lighting stabilization (for places that reapply sky/time)
+        guiStream(pg)
+        guiStream(RbxService.CoreGui)
+    
+        -- Lighting stabilization
         Variables.Maids.Watchers:GiveTask(RbxService.Lighting.ChildAdded:Connect(function(child)
             if not Variables.Config.Enabled then return end
-            if Variables.Config.DisablePostEffects and (child:IsA("BlurEffect") or child:IsA("SunRaysEffect")
-               or child:IsA("ColorCorrectionEffect") or child:IsA("BloomEffect") or child:IsA("DepthOfFieldEffect")) then
+            if Variables.Config.DisablePostEffects and (
+                child:IsA("BlurEffect") or child:IsA("SunRaysEffect") or
+                child:IsA("ColorCorrectionEffect") or child:IsA("BloomEffect") or
+                child:IsA("DepthOfFieldEffect")
+            ) then
                 storeOnce(Variables.Snapshot.PostEffects, child, child.Enabled)
                 pcall(function() child.Enabled = false end)
             end
-            if Variables.Config.GraySky or Variables.Config.FullBright then scheduleApplyLowLighting() end
+            if Variables.Config.GraySky or Variables.Config.FullBright then
+                scheduleApplyLowLighting()
+            end
         end))
+    
         Variables.Maids.Watchers:GiveTask(RbxService.Lighting.Changed:Connect(function()
             if not Variables.Config.Enabled then return end
-            if Variables.Config.GraySky or Variables.Config.FullBright then scheduleApplyLowLighting() end
+            if Variables.Config.GraySky or Variables.Config.FullBright then
+                scheduleApplyLowLighting()
+            end
         end))
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Apply / Restore (master switch)
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function applyAll()
         Variables.Config.Enabled = true
+    
         snapshotLighting()
-
-        if Variables.Config.DisableThreeDRendering then pcall(function() RbxService.RunService:Set3dRenderingEnabled(false) end) end
+    
+        if Variables.Config.DisableThreeDRendering then
+            pcall(function() RbxService.RunService:Set3dRenderingEnabled(false) end)
+        end
+    
         if Variables.Config.TargetFramesPerSecond and Variables.Config.TargetFramesPerSecond > 0 then
             setFpsCap(Variables.Config.TargetFramesPerSecond)
         end
-
+    
         if Variables.Config.HidePlayerGui then hidePlayerGuiAll() end
-        if Variables.Config.HideCoreGui then hideCoreGuiAll(true) end
-
-        if Variables.Config.DisableViewportFrames or Variables.Config.DisableVideoFrames then scanViewportAndVideo() end
+        if Variables.Config.HideCoreGui  then hideCoreGuiAll(true) end
+    
+        if Variables.Config.DisableViewportFrames or Variables.Config.DisableVideoFrames then
+            scanViewportAndVideo()
+        end
+    
         if Variables.Config.MuteAllSounds then applyMuteAllSounds() end
-
+    
         eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Animator") end, guardAnimator)
         if Variables.Config.PauseCharacterAnimations then toggleCharacterAnimateScripts(false) end
-
+    
         if Variables.Config.FreezeWorldAssemblies then
             eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, freezeWorldPart)
         end
+    
         if Variables.Config.DisableConstraints then disableWorldConstraints() end
-
-        if Variables.Config.AnchorCharacter then anchorCharacter(true) end
+        if Variables.Config.AnchorCharacter   then anchorCharacter(true) end
+    
         reduceSimulationRadius()
         removeNetOwnership()
-
-        if Variables.Config.StopParticleSystems then eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter) end
+    
+        if Variables.Config.StopParticleSystems then
+            eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter)
+        end
+    
         if Variables.Config.DestroyEmitters and not Variables.Irreversible.EmittersDestroyed then
             eachDescendantChunked(RbxService.Workspace, isEmitter, destroyEmitterIrreversible)
             Variables.Irreversible.EmittersDestroyed = true
         end
-        if Variables.Config.SmoothPlasticEverywhere then eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart) end
-        if Variables.Config.HideDecals then eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture) end
+    
+        if Variables.Config.SmoothPlasticEverywhere then
+            eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("BasePart") end, smoothPlasticPart)
+        end
+    
+        if Variables.Config.HideDecals then
+            eachDescendantChunked(RbxService.Workspace, function(inst) return inst:IsA("Decal") or inst:IsA("Texture") end, hideDecalOrTexture)
+        end
+    
         if Variables.Config.NukeTextures and not Variables.Irreversible.TexturesNuked then
             eachDescendantChunked(RbxService.Workspace, function(inst)
                 return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
-                    or inst:IsA("MeshPart") or inst:IsA("SpecialMesh")
-                    or inst:IsA("Shirt") or inst:IsA("Pants") or inst:IsA("ShirtGraphic")
-                    or inst:IsA("BasePart")
+                    or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
+                    or inst:IsA("Pants") or inst:IsA("ShirtGraphic") or inst:IsA("BasePart")
             end, nukeTexturesIrreversible)
+    
+            -- Optional: also strip common UI textures
+            eachDescendantChunked(game, function(inst)
+                return inst:IsA("ImageLabel") or inst:IsA("ImageButton")
+            end, nukeTexturesIrreversible)
+    
             Variables.Irreversible.TexturesNuked = true
         end
-
+    
         if Variables.Config.RemoveGrassDecoration then terrainDecorationSet(true) end
-        if Variables.Config.DisablePostEffects then disablePostEffects() end
-        if Variables.Config.GraySky or Variables.Config.FullBright then scheduleApplyLowLighting() end
+        if Variables.Config.DisablePostEffects   then disablePostEffects() end
+    
+        if Variables.Config.GraySky or Variables.Config.FullBright then
+            scheduleApplyLowLighting()
+        end
+    
         if Variables.Config.UseMinimumQuality then applyQualityMinimum() end
-
         if Variables.Config.ReplaceWaterWithBlock then applyWaterReplacement() end
-
+    
         buildWatchers()
     end
-
+    
     local function restoreAll()
         Variables.Config.Enabled = false
+    
+        -- Shut down watchers first
         Variables.Maids.Watchers:DoCleaning()
         Variables.Maids.EmitterGuards:DoCleaning()
-
-        if Variables.Config.DisableThreeDRendering then pcall(function() RbxService.RunService:Set3dRenderingEnabled(true) end) end
-
+    
+        -- ALWAYS restore these (don’t gate on the current config — fixes spam-toggle wedge)
+        pcall(function() RbxService.RunService:Set3dRenderingEnabled(true) end)
         restoreViewportAndVideo()
         restoreSounds()
-
         releaseAnimatorGuards()
         toggleCharacterAnimateScripts(true)
-
-        if Variables.Config.FreezeWorldAssemblies then restoreAnchoredParts() end
-        if Variables.Config.DisableConstraints then restoreWorldConstraints() end
-        if Variables.Config.AnchorCharacter then anchorCharacter(false) end
-
+    
+        restoreAnchoredParts()      -- was gated; now unconditional
+        restoreWorldConstraints()   -- was gated; now unconditional
+        anchorCharacter(false)      -- was gated; now unconditional
+    
         restorePlayerGuiAll()
         restoreCoreGuiAll()
-
         restorePartMaterials()
         restoreDecalsAndTextures()
         restoreEmitters()
-
+    
+        -- Lighting + postFX
         pcall(function()
             local P = Variables.Snapshot.LightingProps
             if P then
                 local L = RbxService.Lighting
-                L.GlobalShadows = P.GlobalShadows
-                L.Brightness    = P.Brightness
-                L.ClockTime     = P.ClockTime
-                L.Ambient       = P.Ambient
-                L.OutdoorAmbient= P.OutdoorAmbient
+                L.GlobalShadows            = P.GlobalShadows
+                L.Brightness               = P.Brightness
+                L.ClockTime                = P.ClockTime
+                L.Ambient                  = P.Ambient
+                L.OutdoorAmbient           = P.OutdoorAmbient
                 L.EnvironmentDiffuseScale  = P.EnvironmentDiffuseScale
                 L.EnvironmentSpecularScale = P.EnvironmentSpecularScale
             end
@@ -1060,7 +1145,7 @@ return function(UI)
             end
         end)
         restorePostEffects()
-
+    
         if Variables.Snapshot.TerrainDecoration ~= nil then
             local terrain = RbxService.Workspace:FindFirstChildOfClass("Terrain")
             pcall(function()
@@ -1070,74 +1155,95 @@ return function(UI)
             end)
             Variables.Snapshot.TerrainDecoration = nil
         end
+    
         restoreQuality()
-
         removeWaterReplacement()
-
-        -- clear lightweight maps
+    
+        -- Clear lightweight maps
         Variables.Snapshot.PlayerGuiEnabled = {}
         Variables.Snapshot.CoreGuiState     = {}
         Variables.Snapshot.ViewportVisible  = {}
         Variables.Snapshot.VideoPlaying     = {}
     end
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- UI (Obsidian)
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local group = UI.Tabs.Misc:AddRightGroupbox("Optimization", "power")
-
+    
     group:AddToggle("OptEnabled", {
-        Text = "Enable Optimization",
+        Text    = "Enable Optimization",
         Default = false,
         Tooltip = "Master switch",
-    }):OnChanged(function(state) if state then applyAll() else restoreAll() end end)
-
+    }):OnChanged(function(state)
+        if state then applyAll() else restoreAll() end
+    end)
+    
     group:AddSlider("OptFps", {
-        Text = "Target FPS",
-        Min = 1, Max = 120,
+        Text    = "Target FPS",
+        Min     = 1,
+        Max     = 120,
         Default = Variables.Config.TargetFramesPerSecond,
-        Suffix = "FPS",
+        Suffix  = "FPS",
     }):OnChanged(function(value)
         Variables.Config.TargetFramesPerSecond = math.floor(value)
         if Variables.Config.Enabled then setFpsCap(Variables.Config.TargetFramesPerSecond) end
     end)
-
+    
     group:AddDivider()
     group:AddLabel("Rendering / UI")
+    
     group:AddToggle("Opt3D", { Text="Disable 3D Rendering", Default=Variables.Config.DisableThreeDRendering })
         :OnChanged(function(state)
             Variables.Config.DisableThreeDRendering = state
-            if Variables.Config.Enabled then pcall(function() RbxService.RunService:Set3dRenderingEnabled(not state) end) end
+            if Variables.Config.Enabled then
+                pcall(function() RbxService.RunService:Set3dRenderingEnabled(not state) end)
+            end
         end)
+    
     group:AddToggle("OptHidePlayerGui", { Text="Hide PlayerGui", Default=Variables.Config.HidePlayerGui })
         :OnChanged(function(state)
             Variables.Config.HidePlayerGui = state
             if not Variables.Config.Enabled then return end
             if state then hidePlayerGuiAll() else restorePlayerGuiAll() end
         end)
+    
     group:AddToggle("OptHideCoreGui", { Text="Hide CoreGui", Default=Variables.Config.HideCoreGui })
         :OnChanged(function(state)
             Variables.Config.HideCoreGui = state
             if Variables.Config.Enabled then hideCoreGuiAll(state) end
         end)
+    
     group:AddToggle("OptNoViewports", { Text="Disable ViewportFrames", Default=Variables.Config.DisableViewportFrames })
         :OnChanged(function(state)
             Variables.Config.DisableViewportFrames = state
-            if Variables.Config.Enabled then if state then scanViewportAndVideo() else restoreViewportAndVideo() end buildWatchers() end
+            if Variables.Config.Enabled then
+                if state then scanViewportAndVideo() else restoreViewportAndVideo() end
+                buildWatchers()
+            end
         end)
+    
     group:AddToggle("OptNoVideos", { Text="Disable VideoFrames", Default=Variables.Config.DisableVideoFrames })
         :OnChanged(function(state)
             Variables.Config.DisableVideoFrames = state
-            if Variables.Config.Enabled then if state then scanViewportAndVideo() else restoreViewportAndVideo() end buildWatchers() end
+            if Variables.Config.Enabled then
+                if state then scanViewportAndVideo() else restoreViewportAndVideo() end
+                buildWatchers()
+            end
         end)
+    
     group:AddToggle("OptMute", { Text="Mute All Sounds", Default=Variables.Config.MuteAllSounds })
         :OnChanged(function(state)
             Variables.Config.MuteAllSounds = state
-            if Variables.Config.Enabled then if state then applyMuteAllSounds() else restoreSounds() end buildWatchers() end
+            if Variables.Config.Enabled then
+                if state then applyMuteAllSounds() else restoreSounds() end
+                buildWatchers()
+            end
         end)
-
+    
     group:AddDivider()
     group:AddLabel("Animation / Motion")
+    
     group:AddToggle("OptPauseChar", { Text="Pause Character Animations", Default=Variables.Config.PauseCharacterAnimations })
         :OnChanged(function(state)
             Variables.Config.PauseCharacterAnimations = state
@@ -1148,6 +1254,7 @@ return function(UI)
                 buildWatchers()
             end
         end)
+    
     group:AddToggle("OptPauseOther", { Text="Pause Other Animations (client‑driven)", Default=Variables.Config.PauseOtherAnimations })
         :OnChanged(function(state)
             Variables.Config.PauseOtherAnimations = state
@@ -1157,6 +1264,7 @@ return function(UI)
                 buildWatchers()
             end
         end)
+    
     group:AddToggle("OptFreeze", { Text="Freeze World Assemblies (reversible)", Default=Variables.Config.FreezeWorldAssemblies })
         :OnChanged(function(state)
             Variables.Config.FreezeWorldAssemblies = state
@@ -1169,35 +1277,49 @@ return function(UI)
                 buildWatchers()
             end
         end)
+    
     group:AddToggle("OptNoConstraints", { Text="Disable Constraints (reversible)", Default=Variables.Config.DisableConstraints })
         :OnChanged(function(state)
             Variables.Config.DisableConstraints = state
-            if Variables.Config.Enabled then if state then disableWorldConstraints() else restoreWorldConstraints() end end
+            if Variables.Config.Enabled then
+                if state then disableWorldConstraints() else restoreWorldConstraints() end
+            end
         end)
-
+    
     group:AddDivider()
     group:AddLabel("Physics / Network")
+    
     group:AddToggle("OptAnchorChar", { Text="Anchor Character", Default=Variables.Config.AnchorCharacter })
-        :OnChanged(function(state) Variables.Config.AnchorCharacter = state; if Variables.Config.Enabled then anchorCharacter(state) end end)
+        :OnChanged(function(state)
+            Variables.Config.AnchorCharacter = state
+            if Variables.Config.Enabled then anchorCharacter(state) end
+        end)
+    
     group:AddToggle("OptSimRadius", { Text="Reduce Simulation Radius", Default=Variables.Config.ReduceSimulationRadius })
-        :OnChanged(function(state) Variables.Config.ReduceSimulationRadius = state; if Variables.Config.Enabled and state then reduceSimulationRadius() end end)
+        :OnChanged(function(state)
+            Variables.Config.ReduceSimulationRadius = state
+            if Variables.Config.Enabled and state then reduceSimulationRadius() end
+        end)
+    
     group:AddToggle("OptNoNet", { Text="Remove Local Network Ownership", Default=Variables.Config.RemoveLocalNetworkOwnership })
-        :OnChanged(function(state) Variables.Config.RemoveLocalNetworkOwnership = state; if Variables.Config.Enabled and state then removeNetOwnership() end if Variables.Config.Enabled then buildWatchers() end end)
-
+        :OnChanged(function(state)
+            Variables.Config.RemoveLocalNetworkOwnership = state
+            if Variables.Config.Enabled and state then removeNetOwnership() end
+            if Variables.Config.Enabled then buildWatchers() end
+        end)
+    
     group:AddDivider()
     group:AddLabel("Particles / Effects / Materials")
+    
     group:AddToggle("OptStopParticles", { Text="Stop Particle Systems (reversible)", Default=Variables.Config.StopParticleSystems })
         :OnChanged(function(state)
             Variables.Config.StopParticleSystems = state
             if Variables.Config.Enabled then
-                if state then
-                    eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter)
-                    buildWatchers()
-                else
-                    restoreEmitters()
-                end
+                if state then eachDescendantChunked(RbxService.Workspace, isEmitter, stopEmitter) buildWatchers()
+                else restoreEmitters() end
             end
         end)
+    
     group:AddToggle("OptDestroyEmitters", { Text="Destroy Emitters (irreversible)", Default=Variables.Config.DestroyEmitters })
         :OnChanged(function(state)
             Variables.Config.DestroyEmitters = state
@@ -1207,6 +1329,7 @@ return function(UI)
                 buildWatchers()
             end
         end)
+    
     group:AddToggle("OptSmooth", { Text="Force SmoothPlastic (reversible)", Default=Variables.Config.SmoothPlasticEverywhere })
         :OnChanged(function(state)
             Variables.Config.SmoothPlasticEverywhere = state
@@ -1219,6 +1342,7 @@ return function(UI)
                 end
             end
         end)
+    
     group:AddToggle("OptHideDecals", { Text="Hide Decals/Textures (reversible)", Default=Variables.Config.HideDecals })
         :OnChanged(function(state)
             Variables.Config.HideDecals = state
@@ -1231,67 +1355,114 @@ return function(UI)
                 end
             end
         end)
+    
     group:AddToggle("OptNukeTextures", { Text="Nuke Textures (irreversible)", Default=Variables.Config.NukeTextures })
         :OnChanged(function(state)
             Variables.Config.NukeTextures = state
             if Variables.Config.Enabled and state and not Variables.Irreversible.TexturesNuked then
                 eachDescendantChunked(RbxService.Workspace, function(inst)
                     return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
-                        or inst:IsA("MeshPart") or inst:IsA("SpecialMesh")
-                        or inst:IsA("Shirt") or inst:IsA("Pants") or inst:IsA("ShirtGraphic")
-                        or inst:IsA("BasePart")
+                        or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
+                        or inst:IsA("Pants") or inst:IsA("ShirtGraphic") or inst:IsA("BasePart")
                 end, nukeTexturesIrreversible)
+    
+                -- Optional UI carriers
+                eachDescendantChunked(game, function(inst)
+                    return inst:IsA("ImageLabel") or inst:IsA("ImageButton")
+                end, nukeTexturesIrreversible)
+    
                 Variables.Irreversible.TexturesNuked = true
                 buildWatchers()
             end
         end)
-
+    
     group:AddDivider()
     group:AddLabel("Lighting / Quality")
+    
     group:AddToggle("OptNoGrass", { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
-        :OnChanged(function(state) Variables.Config.RemoveGrassDecoration = state; if Variables.Config.Enabled then terrainDecorationSet(state) end end)
+        :OnChanged(function(state)
+            Variables.Config.RemoveGrassDecoration = state
+            if Variables.Config.Enabled then terrainDecorationSet(state) end
+        end)
+    
     group:AddToggle("OptNoPostFX", { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
-        :OnChanged(function(state) Variables.Config.DisablePostEffects = state; if Variables.Config.Enabled then if state then disablePostEffects() else restorePostEffects() end buildWatchers() end end)
+        :OnChanged(function(state)
+            Variables.Config.DisablePostEffects = state
+            if Variables.Config.Enabled then
+                if state then disablePostEffects() else restorePostEffects() end
+                buildWatchers()
+            end
+        end)
+    
     group:AddToggle("OptGraySky", { Text="Gray Sky", Default=Variables.Config.GraySky })
-        :OnChanged(function(state) Variables.Config.GraySky = state; if Variables.Config.Enabled then scheduleApplyLowLighting(); buildWatchers() end end)
+        :OnChanged(function(state)
+            Variables.Config.GraySky = state
+            if Variables.Config.Enabled then scheduleApplyLowLighting(); buildWatchers() end
+        end)
+    
     group:AddSlider("OptGraySkyShade", { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
-        :OnChanged(function(value) Variables.Config.GraySkyShade = math.floor(value); if Variables.Config.Enabled and Variables.Config.GraySky then scheduleApplyLowLighting() end end)
+        :OnChanged(function(value)
+            Variables.Config.GraySkyShade = math.floor(value)
+            if Variables.Config.Enabled and Variables.Config.GraySky then scheduleApplyLowLighting() end
+        end)
+    
     group:AddToggle("OptFullBright", { Text="Full Bright", Default=Variables.Config.FullBright })
-        :OnChanged(function(state) Variables.Config.FullBright = state; if Variables.Config.Enabled then scheduleApplyLowLighting(); buildWatchers() end end)
+        :OnChanged(function(state)
+            Variables.Config.FullBright = state
+            if Variables.Config.Enabled then scheduleApplyLowLighting(); buildWatchers() end
+        end)
+    
     group:AddSlider("OptFullBrightLvl", { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
-        :OnChanged(function(value) Variables.Config.FullBrightLevel = math.floor(value); if Variables.Config.Enabled and Variables.Config.FullBright then scheduleApplyLowLighting() end end)
+        :OnChanged(function(value)
+            Variables.Config.FullBrightLevel = math.floor(value)
+            if Variables.Config.Enabled and Variables.Config.FullBright then scheduleApplyLowLighting() end
+        end)
+    
     group:AddToggle("OptMinQuality", { Text="Use Minimum Quality", Default=Variables.Config.UseMinimumQuality })
-        :OnChanged(function(state) Variables.Config.UseMinimumQuality = state; if Variables.Config.Enabled then if state then applyQualityMinimum() else restoreQuality() end end end)
+        :OnChanged(function(state)
+            Variables.Config.UseMinimumQuality = state
+            if Variables.Config.Enabled then
+                if state then applyQualityMinimum() else restoreQuality() end
+            end
+        end)
+    
     group:AddToggle("OptClearBlurRestore", { Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
-        :OnChanged(function(state) Variables.Config.ForceClearBlurOnRestore = state end)
-
+        :OnChanged(function(state)
+            Variables.Config.ForceClearBlurOnRestore = state
+        end)
+    
     group:AddDivider()
     group:AddLabel("Water Replacement (auto‑mimic)")
+    
     group:AddToggle("OptWaterProxy", { Text="Replace Water", Default=Variables.Config.ReplaceWaterWithBlock })
         :OnChanged(function(state)
             Variables.Config.ReplaceWaterWithBlock = state
             if not Variables.Config.Enabled then return end
             if state then applyWaterReplacement() else removeWaterReplacement() end
         end)
-
-    -- REQUIRED: Obsidian Color Picker
-    group:AddColorPicker("OptWaterColor", {
-        Text = "Water Color",
-        Default = Variables.Config.WaterColor,
-    }):OnChanged(function(color)
-        Variables.Config.WaterColor = color
-        if Variables.Runtime.WaterMode == "Part" and Variables.Runtime.WaterProxyPart then
-            Variables.Runtime.WaterProxyPart.Color = color
-        elseif Variables.Runtime.WaterMode == "Terrain" and Variables.Runtime.WaterSource then
-            pcall(function() Variables.Runtime.WaterSource.WaterColor = color end)
-        end
-    end)
-
+    
+    -- IMPORTANT: Obsidian color pickers attach to a Label or Toggle.
+    -- Using a Label here avoids '...missing method AddColorPicker...' errors.
+    group:AddLabel("Water Color")
+        :AddColorPicker("OptWaterColor", {
+            Default = Variables.Config.WaterColor,
+            Title   = "Water Color",
+        })
+        :OnChanged(function(color)
+            Variables.Config.WaterColor = color
+            if Variables.Runtime.WaterMode == "Part" and Variables.Runtime.WaterProxyPart then
+                Variables.Runtime.WaterProxyPart.Color = color
+            elseif Variables.Runtime.WaterMode == "Terrain" and Variables.Runtime.WaterSource then
+                pcall(function() Variables.Runtime.WaterSource.WaterColor = color end)
+            end
+        end)
+    
     group:AddSlider("OptWaterTrans", {
-        Text = "Water Transparency",
-        Min = 0, Max = 100,
+        Text    = "Water Transparency",
+        Min     = 0,
+        Max     = 100,
         Default = Variables.Config.WaterTransparency * 100,
-        Suffix = "%",
+        Suffix  = "%",
     }):OnChanged(function(value)
         Variables.Config.WaterTransparency = math.clamp(value / 100, 0, 1)
         if Variables.Runtime.WaterMode == "Part" and Variables.Runtime.WaterProxyPart then
@@ -1300,16 +1471,19 @@ return function(UI)
             pcall(function() Variables.Runtime.WaterSource.WaterTransparency = Variables.Config.WaterTransparency end)
         end
     end)
-
-    ------------------------------------------------------------------------
+    
+    ----------------------------------------------------------------------
     -- Module Stop
-    ------------------------------------------------------------------------
+    ----------------------------------------------------------------------
     local function Stop()
-        if UI and UI.Toggles and UI.Toggles.OptEnabled then UI.Toggles.OptEnabled:SetValue(false) end
+        if UI and UI.Toggles and UI.Toggles.OptEnabled then
+            UI.Toggles.OptEnabled:SetValue(false)
+        end
         restoreAll()
         Variables.Maids.Optimization:DoCleaning()
     end
-
+    
     return { Name = "Optimization", Stop = Stop }
-end
+    
+    end 
 end
