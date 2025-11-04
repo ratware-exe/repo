@@ -19,6 +19,7 @@ do
         "modules/infinitezoom.lua",
         "modules/antiafk.lua",
         "modules/optimization.lua",
+        "modules/clientnamespoofer.lua",
     }
 
     for i = 1, #featurePaths do
