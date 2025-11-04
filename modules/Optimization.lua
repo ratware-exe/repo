@@ -137,12 +137,6 @@ local Variables = {
 -- DELETED: bumpSweepToken()
 -- DELETED: beginSweepToken()
 
---[[
-    FIX 2 (APPLIED):
-    The 'sweepToken' system is removed.
-    'shouldCancelSweep' is now 'shouldCancel' and *only*
-    checks the master 'cancelRequested' flag.
-]]
 local function shouldCancel()
     return Variables.Runtime.cancelRequested
 end
@@ -318,9 +312,14 @@ end
 ----------------------------------------------------------------------
 -- Particles / decals / materials
 ----------------------------------------------------------------------
+--[[
+    FIX 3 (APPLIED):
+    Added 'Sparkles' to the isEmitter check.
+]]
 local function isEmitter(inst)
     return inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
         or inst:IsA("Fire") or inst:IsA("Smoke")
+        or inst:IsA("Sparkles") -- NEW
 end
 
 -- Reversible STOP
@@ -405,6 +404,23 @@ local function stopEmitter(inst)
             end
         end)
         Variables.Maids.EmitterGuards:GiveTask(c4)
+    
+    --[[
+        FIX 3 (APPLIED):
+        Added 'Sparkles' handler.
+    ]]
+    elseif inst:IsA("Sparkles") then
+        storeOnce(Variables.Snapshot.EmitterProps, inst, {
+            Class   = "Sparkles",
+            Enabled = inst.Enabled,
+        })
+        pcall(function() inst.Enabled = false end)
+        local c5 = inst:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if Variables.Config.Enabled and not Variables.Runtime.cancelRequested and Variables.Config.StopParticleSystems then
+                pcall(function() inst.Enabled = false end)
+            end
+        end)
+        Variables.Maids.EmitterGuards:GiveTask(c5)
     end
 end
 
@@ -430,6 +446,12 @@ local function restoreEmitters()
                 elseif props.Class == "Beam" then
                     emitter.Transparency = props.Transparency
                     emitter.Enabled      = props.Enabled
+                --[[
+                    FIX 3 (APPLIED):
+                    Added 'Sparkles' restoration.
+                ]]
+                elseif props.Class == "Sparkles" then
+                    emitter.Enabled = props.Enabled
                 end
             end
         end)
@@ -520,6 +542,14 @@ local function nukeTexturesIrreversible(inst)
 
     elseif inst:IsA("ShirtGraphic") then
         pcall(function() inst.Graphic = "" end)
+
+    --[[
+        FIX 2 (APPLIED):
+        Added a generic 'BasePart' check to force all
+        other parts (like regular Parts) to SmoothPlastic.
+    ]]
+    elseif inst:IsA("BasePart") then -- Catches regular Parts, etc.
+        pcall(function() inst.Material = Enum.Material.SmoothPlastic end)
 
     -- Also strip UI carriers so users can see it actually "does something"
     elseif inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
@@ -886,7 +916,15 @@ local function applyWaterReplacement()
             Reflectance = source.Reflectance,
             CastShadow  = source.CastShadow
         })
-        pcall(function() source.Transparency = 1 end)
+        --[[
+            FIX 1 (APPLIED):
+            Also set 'Reflectance' to 0 to hide the water
+            surface, as seen in your screenshot.
+        ]]
+        pcall(function()
+            source.Transparency = 1
+            source.Reflectance = 0
+        end)
 
         local function syncProxy()
             if proxy and proxy.Parent and source and source.Parent then
@@ -956,8 +994,13 @@ local function removeWaterReplacement()
                     source.Material    = saved.Material
                     source.Reflectance = saved.Reflectance
                     source.CastShadow  = saved.CastShadow
+                    -- Use the saved reflectance, don't default to 0
+                    source.Transparency = 0 
+                else
+                    -- Fallback if no snapshot
+                    source.Transparency = 0
+                    source.Reflectance = 0.5 -- A sensible default
                 end
-                source.Transparency = 0
             end
         end)
         Variables.Snapshot.PartMaterial[source] = nil
@@ -1135,6 +1178,25 @@ local function applyAll()
     end
 
     if Variables.Config.NukeTextures and not Variables.Irreversible.TexturesNuked then
+        --[[
+            FIX 2 (APPLIED):
+            Nuke MaterialService properties first.
+        ]]
+        pcall(function()
+            if RbxService.MaterialService then
+                RbxService.MaterialService.FallbackMaterial = Enum.Material.SmoothPlastic
+                if typeof(RbxService.MaterialService.Use2022Materials) == "boolean" then
+                    RbxService.MaterialService.Use2022Materials = false
+                end
+                -- Destroy all custom variants
+                for _, variant in ipairs(RbxService.MaterialService:GetChildren()) do
+                    if variant:IsA("MaterialVariant") then
+                        pcall(function() variant:Destroy() end)
+                    end
+                end
+            end
+        end)
+        
         eachDescendantChunked(RbxService.Workspace, function(inst)
             return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
                 or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
@@ -1163,15 +1225,8 @@ local function applyAll()
 end
 
 local function restoreAll()
-    -- [[
-    --    FIX 1 (APPLIED):
-    --    'cancelRequested = true' is REMOVED from the start of restoreAll().
-    --    The 'requestEnabled' loop now handles setting this flag *before*
-    --    this function is even called, and *resets it* for this
-    --    function to run. This stops the function from cancelling itself.
-    -- ]]
-    -- DELETED: Variables.Runtime.cancelRequested = true
-
+    -- 'cancelRequested = true' is REMOVED from here.
+    
     -- Shut down watchers first
     Variables.Maids.Watchers:DoCleaning()
     Variables.Maids.EmitterGuards:DoCleaning()
@@ -1258,14 +1313,10 @@ local function requestEnabled(desired)
                 local want = Variables.Runtime.desiredEnabled
                 
                 --[[
-                    FIX 1 (APPLIED):
-                    We reset 'cancelRequested' to false *inside* the loop.
-                    This ensures that the 'restoreAll' (or 'applyAll')
-                    sweep is allowed to run, fixing the "state doesn't
-                    return" bug.
-                    If the user spams *again* during this new sweep, the
-                    outer 'requestEnabled' function will set it back to
-                    'true', correctly cancelling *this* sweep.
+                    FIX (VERIFIED):
+                    Reset 'cancelRequested' to false *inside* the loop.
+                    This ensures the new sweep (apply or restore) is
+                    allowed to run without cancelling itself.
                 ]]
                 Variables.Runtime.cancelRequested = false
                 
@@ -1402,13 +1453,6 @@ bindOption("OptFps", function(v)
     Variables.Config.TargetFramesPerSecond = v
     if Variables.Config.Enabled then setFpsCap(v) end
 end)
-
---[[
-    FIX 2 (APPLIED):
-    All individual toggles no longer call 'beginSweepToken' or pass 'tk'
-    to their functions. They just do the work. The *only* cancellation
-    now comes from the master 'requestEnabled' function.
-]]
 
 -- Rendering / UI
 bindToggle("Opt3D", function(v)
@@ -1554,16 +1598,29 @@ end)
 bindToggle("OptNukeTextures", function(v)
     Variables.Config.NukeTextures = v
     if Variables.Config.Enabled and v and not Variables.Irreversible.TexturesNuked then
+        -- Rerun the nuke functions
+        pcall(function()
+            if RbxService.MaterialService then
+                RbxService.MaterialService.FallbackMaterial = Enum.Material.SmoothPlastic
+                if typeof(RbxService.MaterialService.Use2022Materials) == "boolean" then
+                    RbxService.MaterialService.Use2022Materials = false
+                end
+                for _, variant in ipairs(RbxService.MaterialService:GetChildren()) do
+                    if variant:IsA("MaterialVariant") then
+                        pcall(function() variant:Destroy() end)
+                    end
+                end
+            end
+        end)
         eachDescendantChunked(RbxService.Workspace, function(inst)
             return inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance")
                 or inst:IsA("MeshPart") or inst:IsA("SpecialMesh") or inst:IsA("Shirt")
                 or inst:IsA("Pants") or inst:IsA("ShirtGraphic") or inst:IsA("BasePart")
         end, nukeTexturesIrreversible)
-
         eachDescendantChunked(game, function(inst)
             return inst:IsA("ImageLabel") or inst:IsA("ImageButton")
         end, nukeTexturesIrreversible)
-
+        
         Variables.Irreversible.TexturesNuked = true
         buildWatchers()
     end
