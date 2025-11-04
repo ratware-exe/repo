@@ -70,7 +70,7 @@ local Variables = {
         DisablePostEffects      = true,   -- Bloom/CC/DoF/SunRays/Blur
 
         GraySky                 = true,
-        GraySkyShade            = 128,    -- 0..255
+        -- GraySkyShade (REMOVED)
         FullBright              = true,
         FullBrightLevel         = 2,      -- 0..5
         
@@ -101,7 +101,7 @@ local Variables = {
 
         EmitterProps       = {},  -- [reversible stop] per type snapshot (see stopEmitter)
 
-        LightingProps      = { -- NEW: Added Fog properties
+        LightingProps      = { 
             FogStart = nil,
             FogEnd = nil,
             FogColor = nil
@@ -143,9 +143,6 @@ local Variables = {
 ----------------------------------------------------------------------
 -- Anti‑race helpers (NEW)
 ----------------------------------------------------------------------
--- DELETED: bumpSweepToken()
--- DELETED: beginSweepToken()
-
 local function shouldCancel()
     return Variables.Runtime.cancelRequested
 end
@@ -690,24 +687,27 @@ end
 
 --[[
     FIX (APPLIED):
-    'applyLowLighting' now also removes the Skybox if 'GraySky' is on.
-    This ensures the gray ambient light is actually visible.
+    Separated GraySky and FullBright logic.
+    - GraySky: Sets ambient to 128 gray, time to 12, brightness to 1, and removes sky.
+    - FullBright: Sets brightness to slider, and ambient to 192 gray.
 ]]
 local function applyLowLighting()
     local L = RbxService.Lighting
     pcall(function()
         L.GlobalShadows = false
-        L.Brightness    = Variables.Config.FullBright and math.clamp(Variables.Config.FullBrightLevel, 0, 5) or 1
         L.EnvironmentDiffuseScale  = 0
         L.EnvironmentSpecularScale = 0
+
         if Variables.Config.GraySky then
-            local shade = math.clamp(Variables.Config.GraySkyShade, 0, 255)
-            local color = Color3.fromRGB(shade, shade, shade)
+            -- Gray Sky mode: Overrides FullBright's settings.
+            -- Simple, solid gray.
+            local color = Color3.fromRGB(128, 128, 128) -- Hardcoded gray
+            L.Brightness = 1 -- Reset brightness to default
             L.ClockTime = 12
             L.Ambient = color
             L.OutdoorAmbient = color
 
-            -- NEW FIX: GraySky must also remove any existing skybox to be visible
+            -- Remove skybox
             for _, child in ipairs(L:GetChildren()) do
                 if child:IsA("Sky") then
                     if not table.find(Variables.Snapshot.Skyboxes, child) then
@@ -716,6 +716,15 @@ local function applyLowLighting()
                     child.Parent = nil
                 end
             end
+        
+        elseif Variables.Config.FullBright then
+            -- Full Bright mode: High brightness + bright ambient.
+            L.Brightness = math.clamp(Variables.Config.FullBrightLevel, 0, 5)
+            -- Add the "non-blinding bright side effect"
+            local brightAmbient = Color3.fromRGB(192, 192, 192)
+            L.Ambient = brightAmbient
+            L.OutdoorAmbient = brightAmbient
+            -- We DON'T touch ClockTime or Skybox here, letting the original sky show.
         end
     end)
 end
@@ -727,11 +736,6 @@ local function applyRemoveFog()
     end)
 end
 
---[[
-    FIX (APPLIED):
-    'scheduleApplyLighting' now restores ambient light/brightness
-    if GraySky/FullBright are toggled off.
-]]
 local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
@@ -741,19 +745,15 @@ local function scheduleApplyLighting()
             if (Variables.Config.GraySky or Variables.Config.FullBright) then
                 applyLowLighting()
             else
-                -- Restore Ambient/OutdoorAmbient/ClockTime if GraySky/FullBright are both off
+                -- Restore Ambient/OutdoorAmbient/ClockTime/Brightness if both are off
                 pcall(function()
                     local P = Variables.Snapshot.LightingProps
                     if P then
                         local L = RbxService.Lighting
-                        if not Variables.Config.FullBright then
-                             L.Brightness = P.Brightness
-                        end
-                        if not Variables.Config.GraySky then
-                            L.Ambient = P.Ambient
-                            L.OutdoorAmbient = P.OutdoorAmbient
-                            L.ClockTime = P.ClockTime
-                        end
+                        L.Brightness = P.Brightness
+                        L.Ambient = P.Ambient
+                        L.OutdoorAmbient = P.OutdoorAmbient
+                        L.ClockTime = P.ClockTime
                     end
                 end)
             end
@@ -1137,7 +1137,7 @@ local function buildWatchers()
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
         
         -- Handle RemoveSkybox
-        if Variables.Config.RemoveSkybox and child:IsA("Sky") then
+        if (Variables.Config.RemoveSkybox or Variables.Config.GraySky) and child:IsA("Sky") then
             pcall(function() child:Destroy() end) -- Destroy, don't snapshot, as it was added *after* start
         end
 
@@ -1466,7 +1466,7 @@ group:AddLabel("Lighting / Quality")
 group:AddToggle("OptNoGrass",        { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
 group:AddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
 group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=Variables.Config.GraySky })
-group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
+-- REMOVED: group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
 group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
 group:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
 group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) -- NEW
@@ -1699,10 +1699,6 @@ bindToggle("OptNoPostFX", function(v)
     end
 end)
 
---[[
-    FIX (APPLIED):
-    Modified GraySky wiring to handle skybox restoration logic.
-]]
 bindToggle("OptGraySky", function(v)
     Variables.Config.GraySky = v
     if Variables.Config.Enabled then
@@ -1720,11 +1716,7 @@ bindToggle("OptGraySky", function(v)
     end
 end)
 
-bindOption("OptGraySkyShade", function(v)
-    v = math.floor(tonumber(v) or Variables.Config.GraySkyShade)
-    Variables.Config.GraySkyShade = v
-    if Variables.Config.Enabled and Variables.Config.GraySky then scheduleApplyLighting() end
-end)
+-- REMOVED: bindOption("OptGraySkyShade", ...)
 
 bindToggle("OptFullBright", function(v)
     Variables.Config.FullBright = v
@@ -1758,10 +1750,6 @@ bindToggle("OptNoFog", function(v)
     end
 end)
 
---[[
-    FIX (APPLIED):
-    Modified NoSky wiring to handle GraySky inter-dependency.
-]]
 bindToggle("OptNoSky", function(v)
     Variables.Config.RemoveSkybox = v
     if Variables.Config.Enabled then
