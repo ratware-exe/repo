@@ -74,8 +74,8 @@ local Variables = {
         FullBright              = true,
         FullBrightLevel         = 2,      -- 0..5
         
-        RemoveFog               = false, -- NEW
-        RemoveSkybox            = false, -- NEW
+        RemoveFog               = false, 
+        RemoveSkybox            = false, 
 
         UseMinimumQuality       = true,
         ForceClearBlurOnRestore = true,
@@ -101,16 +101,17 @@ local Variables = {
 
         EmitterProps       = {},  -- [reversible stop] per type snapshot (see stopEmitter)
 
-        LightingProps      = { -- NEW: Added Fog properties
+        LightingProps      = { 
             FogStart = nil,
             FogEnd = nil,
-            FogColor = nil
+            FogColor = nil,
+            ColorShift_Top = nil -- NEW: Snapshot for Gray Sky
         },  -- saved lighting fields
         PostEffects        = {},  -- Effect -> Enabled
         TerrainDecoration  = nil, -- bool
         QualityLevel       = nil, -- Enum.QualityLevel
 
-        Skyboxes           = {}, -- NEW: To store removed skyboxes
+        Skyboxes           = {}, -- To store removed skyboxes
 
         TerrainWater = {          -- for Terrain mimic mode
             WaterTransparency= nil,
@@ -324,7 +325,7 @@ end
 local function isEmitter(inst)
     return inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Beam")
         or inst:IsA("Fire") or inst:IsA("Smoke")
-        or inst:IsA("Sparkles")
+        or inst:IsA("Sparkles") 
 end
 
 -- Reversible STOP
@@ -682,10 +683,10 @@ local function snapshotLighting()
         OutdoorAmbient          = L.OutdoorAmbient,
         EnvironmentDiffuseScale = L.EnvironmentDiffuseScale,
         EnvironmentSpecularScale= L.EnvironmentSpecularScale,
-        -- NEW: Snapshot fog
         FogStart                = L.FogStart,
         FogEnd                  = L.FogEnd,
         FogColor                = L.FogColor,
+        ColorShift_Top          = L.ColorShift_Top -- GRAY SKY FIX
     }
 end
 
@@ -702,11 +703,11 @@ local function applyLowLighting()
             L.ClockTime = 12
             L.Ambient = color
             L.OutdoorAmbient = color
+            L.ColorShift_Top = color -- GRAY SKY FIX
         end
     end)
 end
 
--- NEW: Fog removal function
 local function applyRemoveFog()
     pcall(function()
         RbxService.Lighting.FogStart = 999998
@@ -714,17 +715,14 @@ local function applyRemoveFog()
     end)
 end
 
--- NEW: Renamed function
 local function scheduleApplyLighting()
     if Variables.Runtime.LightingApplyScheduled then return end
     Variables.Runtime.LightingApplyScheduled = true
     task.defer(function()
-        -- Check master enabled flag first
         if Variables.Config.Enabled and not Variables.Runtime.cancelRequested then
             if (Variables.Config.GraySky or Variables.Config.FullBright) then
                 applyLowLighting()
             end
-            -- NEW: Add fog check
             if Variables.Config.RemoveFog then
                 applyRemoveFog()
             end
@@ -1103,9 +1101,8 @@ local function buildWatchers()
     Variables.Maids.Watchers:GiveTask(RbxService.Lighting.ChildAdded:Connect(function(child)
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
         
-        -- NEW: Handle RemoveSkybox
         if Variables.Config.RemoveSkybox and child:IsA("Sky") then
-            pcall(function() child:Destroy() end) -- Destroy, don't snapshot, as it was added *after* start
+            pcall(function() child:Destroy() end) 
         end
 
         if Variables.Config.DisablePostEffects and (
@@ -1117,13 +1114,11 @@ local function buildWatchers()
             pcall(function() child.Enabled = false end)
         end
 
-        -- NEW: Renamed function
         scheduleApplyLighting()
     end))
 
     Variables.Maids.Watchers:GiveTask(RbxService.Lighting.Changed:Connect(function()
         if not Variables.Config.Enabled or Variables.Runtime.cancelRequested or Variables.Runtime.transitionId ~= myTransition then return end
-        -- NEW: Renamed function
         scheduleApplyLighting()
     end))
 end
@@ -1221,7 +1216,6 @@ local function applyAll()
     if Variables.Config.RemoveGrassDecoration then terrainDecorationSet(true) end
     if Variables.Config.DisablePostEffects   then disablePostEffects() end
 
-    -- NEW: Apply Skybox removal
     if Variables.Config.RemoveSkybox then
         for _, child in ipairs(RbxService.Lighting:GetChildren()) do
             if child:IsA("Sky") then
@@ -1231,7 +1225,6 @@ local function applyAll()
         end
     end
 
-    -- NEW: Renamed function
     scheduleApplyLighting()
 
     if Variables.Config.UseMinimumQuality then applyQualityMinimum() end
@@ -1257,6 +1250,11 @@ local function restoreAll()
     releaseAnimatorGuards()
     toggleCharacterAnimateScripts(true)
 
+Two quick fixes.
+
+1) `Remove Skybox` doesn't restore the skybox
+2) `Remove Fog` doesn't restore the fog
+
     restoreAnchoredParts()
     restoreWorldConstraints()
     restoreCharacterAnchors()
@@ -1279,10 +1277,10 @@ local function restoreAll()
             L.OutdoorAmbient           = P.OutdoorAmbient
             L.EnvironmentDiffuseScale  = P.EnvironmentDiffuseScale
             L.EnvironmentSpecularScale = P.EnvironmentSpecularScale
-            -- NEW: Restore fog
             L.FogStart                 = P.FogStart
             L.FogEnd                   = P.FogEnd
             L.FogColor                 = P.FogColor
+            L.ColorShift_Top           = P.ColorShift_Top -- GRAY SKY FIX
         end
         if Variables.Config.ForceClearBlurOnRestore then
             for _, child in ipairs(RbxService.Lighting:GetChildren()) do
@@ -1292,7 +1290,6 @@ local function restoreAll()
     end)
     restorePostEffects()
 
-    -- NEW: Restore Skyboxes
     for _, inst in ipairs(Variables.Snapshot.Skyboxes) do
         if inst then pcall(function() inst.Parent = RbxService.Lighting end) end
     end
@@ -1439,8 +1436,8 @@ group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=
 group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
 group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
 group:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
-group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) -- NEW
-group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox }) -- NEW
+group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog }) 
+group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox }) 
 group:AddToggle("OptMinQuality",     { Text="Use Minimum Quality",      Default=Variables.Config.UseMinimumQuality })
 group:AddToggle("OptClearBlurRestore",{ Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
 
