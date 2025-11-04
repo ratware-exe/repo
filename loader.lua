@@ -32,6 +32,7 @@ do
     })
 
     local Tabs = {
+        Visuals = Window:AddTab("Visuals", "eye"),
         Misc     = Window:AddTab("Misc", "dice-4"),
         Settings = Window:AddTab("Settings", "settings"),
     }
