@@ -1415,7 +1415,7 @@ group:AddDivider()
 group:AddLabel("Physics / Network")
 
 group:AddToggle("OptAnchorChar",     { Text="Anchor Character",                 Default=Variables.Config.AnchorCharacter })
-group:AddAddToggle("OptSimRadius",      { Text="Reduce Simulation Radius",         Default=Variables.Config.ReduceSimulationRadius })
+group:AddToggle("OptSimRadius",      { Text="Reduce Simulation Radius",         Default=Variables.Config.ReduceSimulationRadius })
 group:AddToggle("OptNoNet",          { Text="Remove Local Network Ownership",   Default=Variables.Config.RemoveLocalNetworkOwnership })
 
 group:AddDivider()
