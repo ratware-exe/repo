@@ -20,6 +20,7 @@ do
 		}
 
 		-- === Backup (Run this ONCE, as early as possible) ===================
+		-- This is your 'OriginalValues' logic, guarded so it only runs once
 		local function ensureBackup()
 			if GlobalEnv.NameSpoofBackup or not LocalPlayer then return end
 			pcall(function()
@@ -38,8 +39,8 @@ do
 			Maids = { NameSpoofer = Maid.new() },
 			RunFlag = false,
 
-			Backup = GlobalEnv.NameSpoofBackup, 
-			Config = GlobalEnv.NameSpoofConfig,
+			Backup = GlobalEnv.NameSpoofBackup, -- Replaces getgenv().OriginalValues
+			Config = GlobalEnv.NameSpoofConfig, -- Replaces getgenv().Config
 		}
 
 		local BLANKS = {
@@ -69,11 +70,11 @@ do
 			pcall(function() LocalPlayer.CharacterAppearanceId = Variables.Backup.CharacterAppearanceId end)
 		end
 
-		-- === Replacement Functions (From your original script) ================
+		-- === Replacement Functions (Ported 1:1 from original) ================
 		local function replaceTextInObject(obj)
 			if not obj or not obj.Parent then return end
 			if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-				if obj:GetAttribute(OUR_INPUT_ATTR) then return end 
+				if obj:GetAttribute(OUR_INPUT_ATTR) then return end
 				if obj:GetAttribute("TextReplaced") then return end
 				obj:SetAttribute("TextReplaced", true)
 
@@ -88,10 +89,9 @@ do
 
 				local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
 					if not Variables.RunFlag then return end 
-					
 					task.wait()
 					local newText = tostring(obj.Text or "")
-
+					
 					if string.find(newText, Variables.Backup.Name, 1, true) then
 						obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 					elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
@@ -117,9 +117,9 @@ do
 
 				local conn = obj:GetPropertyChangedSignal("Image"):Connect(function()
 					if not Variables.RunFlag then return end 
-
 					task.wait()
 					local newImage = tostring(obj.Image or "")
+					
 					if Variables.Config.BlankProfilePicture then
 						if string.find(newImage, tostring(Variables.Backup.UserId), 1, true) or string.find(newImage, Variables.Backup.Name, 1, true) then
 							obj.Image = BLANKS[1]
@@ -130,41 +130,18 @@ do
 			end
 		end
 
-		-- === Hooks (Targeted) ================================
-		-- This function will re-apply spoofing, but ONLY to CoreGui and PlayerList
-		local function rescanAllText()
-			local playerList = CoreGui:FindFirstChild("PlayerList")
-			
-			-- Rescan CoreGui
-			for _, obj in pairs(CoreGui:GetDescendants()) do
-				if obj:GetAttribute("TextReplaced") then
-					obj:SetAttribute("TextReplaced", nil)
-				end
-				replaceTextInObject(obj)
-			end
-			
-			-- Rescan PlayerList
-			if playerList then
-				for _, obj in pairs(playerList:GetDescendants()) do
-					if obj:GetAttribute("TextReplaced") then
-						obj:SetAttribute("TextReplaced", nil)
-					end
-					replaceTextInObject(obj)
-				end
-			end
-		end
-		
-		-- DELETED setupGlobalHook() -- This was the problem.
-
+		-- === Hooks (Ported 1:1 from original, minus global hook) =============
 		local function hookPlayerList()
 			local playerList = CoreGui:FindFirstChild("PlayerList")
 			if not playerList then return end
+			
 			for _, obj in ipairs(playerList:GetDescendants()) do
 				if obj:GetAttribute("TextReplaced") then obj:SetAttribute("TextReplaced", nil) end
 				if obj:GetAttribute("ImageReplaced") then obj:SetAttribute("ImageReplaced", nil) end
 				replaceTextInObject(obj)
 				replaceImageInObject(obj)
 			end
+			
 			local conn = playerList.DescendantAdded:Connect(function(obj)
 				if not Variables.RunFlag then return end
 				replaceTextInObject(obj)
@@ -180,6 +157,7 @@ do
 				replaceTextInObject(obj)
 				replaceImageInObject(obj)
 			end
+			
 			local conn = CoreGui.DescendantAdded:Connect(function(obj)
 				if not Variables.RunFlag then return end
 				replaceTextInObject(obj)
@@ -196,7 +174,7 @@ do
 			killOldStandaloneUi()
 			applyPlayerFields()
 
-			-- setupGlobalHook() -- REMOVED
+			-- Call the targeted hooks from your original script
 			hookPlayerList()
 			hookCoreGui()
 
@@ -207,21 +185,26 @@ do
 			if not Variables.RunFlag then return end
 			Variables.RunFlag = false
 
-			Variables.Maids.NameSpoofer:DoCleaning() -- Disconnects all hooks
-
-			-- We must manually restore text, but only in the hooked areas
+			Variables.Maids.NameSpoofer:DoCleaning() -- This is the 'cleanup()' function
+			
+			-- We must manually restore text, as the original script had no 'Stop'
 			local playerList = CoreGui:FindFirstChild("PlayerList")
-			local areas = { CoreGui:GetDescendants() }
+			local areasToRestore = {}
+			
+			for _, obj in ipairs(CoreGui:GetDescendants()) do
+				table.insert(areasToRestore, obj)
+			end
 			if playerList then
 				for _, obj in ipairs(playerList:GetDescendants()) do
-					table.insert(areas, obj)
+					table.insert(areasToRestore, obj)
 				end
 			end
 
-			for _, obj in pairs(areas) do
+			for _, obj in pairs(areasToRestore) do
 				if obj:GetAttribute("TextReplaced") then
 					pcall(function()
 						local text = tostring(obj.Text or "")
+						-- Check in reverse order of application
 						if string.find(text, Variables.Config.FakeName, 1, true) then
 							obj.Text = (text:gsub(esc(Variables.Config.FakeName), Variables.Backup.Name))
 						elseif string.find(text, Variables.Config.FakeDisplayName, 1, true) then
@@ -233,6 +216,13 @@ do
 					obj:SetAttribute("TextReplaced", nil)
 				end
 				if obj:GetAttribute("ImageReplaced") then
+					-- We can't reliably restore images, but we can un-blank them
+					pcall(function()
+						if obj.Image == BLANKS[1] then
+							-- This is imperfect, but better than nothing
+							obj.Image = string.gsub(obj.Image, "0", Variables.Backup.UserId) 
+						end
+					end)
 					obj:SetAttribute("ImageReplaced", nil)
 				end
 			end
@@ -287,20 +277,21 @@ do
 			end
 		end)
 
-		-- === Inputs → live config ===========================================
+		-- === Inputs → live config (Mimics original 'Apply' button) ==========
 		
 		UI.Options.CNS_DisplayName:OnChanged(function(v)
 			Variables.Config.FakeDisplayName = v or ""
 			if Variables.RunFlag then
-				applyPlayerFields()
-				rescanAllText()   
+				Stop()  -- Clean up old hooks
+				Start() -- Re-apply with new config
 			end
 		end)
 		
 		UI.Options.CNS_Username:OnChanged(function(v)
 			Variables.Config.FakeName = v or ""
 			if Variables.RunFlag then
-				rescanAllText() 
+				Stop()
+				Start()
 			end
 		end)
 		
@@ -313,13 +304,17 @@ do
 			end
 			
 			if Variables.RunFlag then
-				applyPlayerFields() 
-				rescanAllText()   
+				Stop()
+				Start()
 			end
 		end)
 		
 		UI.Toggles.CNS_BlankPfp:OnChanged(function(val)
 			Variables.Config.BlankProfilePicture = val and true or false
+			if Variables.RunFlag then
+				Stop()  -- Re-hook to apply/remove image hooks
+				Start()
+			end
 		end)
 		
 		UI.Toggles.CNS_Enable:OnChanged(function(enabledState)
