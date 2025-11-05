@@ -13,7 +13,7 @@ do
 
 		-- === State ==========================================================
 		GlobalEnv.NameSpoofConfig = GlobalEnv.NameSpoofConfig or {
-			FakeDisplayName 	 = "NameSpoof", -- For leaderboard
+			FakeDisplayName 	 = "NameSpoof", -- For leaderboard ONLY
 			FakeName 			 = "NameSpoof", -- This is the 'getgenv().name' from your script
 		}
 
@@ -37,7 +37,6 @@ do
 			Config = GlobalEnv.NameSpoofConfig,
 			
 			-- We store the 'Active' name so Stop() knows what to replace
-			-- And so 'OnChanged' knows what the *previous* value was
 			ActiveConfig = { FakeName = "" } 
 		}
 
@@ -117,12 +116,12 @@ do
 			if Variables.RunFlag then return end 
 			Variables.RunFlag = true
 			
-			-- Store the name we are applying, so Stop() and OnChanged() can find it
+			-- Store the name we are applying, so Stop() can find it
 			Variables.ActiveConfig.FakeName = Variables.Config.FakeName
 			
 			killOldStandaloneUi()
-			applyPlayerFields() -- Apply leaderboard name
-			hookGlobal() -- Apply TextLabel hooks
+			applyPlayerFields() -- Start System 1
+			hookGlobal() -- Start System 2
 
 			Variables.Maids.NameSpoofer:GiveTask(function() Variables.RunFlag = false end)
 		end
@@ -131,8 +130,8 @@ do
 			if not Variables.RunFlag then return end
 			Variables.RunFlag = false
 
-			Variables.Maids.NameSpoofer:DoCleaning() -- Disconnects all hooks
-			restorePlayerFields() -- Restores leaderboard name
+			Variables.Maids.NameSpoofer:DoCleaning() -- Stop System 2 (Hooks)
+			restorePlayerFields() -- Stop System 1
 			
 			-- Manually scan and restore all text
 			for _, obj in pairs(game:GetDescendants()) do
@@ -193,25 +192,11 @@ do
 		
 		-- This input is SEPARATE. It only affects TextLabels.
 		UI.Options.CNS_Username:OnChanged(function(v)
-			local newFakeName = v or ""
-			local oldFakeName = Variables.ActiveConfig.FakeName
-			
-			Variables.Config.FakeName = newFakeName -- Update global config
-			Variables.ActiveConfig.FakeName = newFakeName -- Update active config
-			
+			Variables.Config.FakeName = v or ""
 			if Variables.RunFlag then
-				-- Re-scan all text to replace the *old* fake name with the *new* one
-				-- This makes it dynamic without restarting all the hooks
-				for _, obj in pairs(game:GetDescendants()) do
-					if obj:IsA("TextLabel") and not obj:GetAttribute(OUR_INPUT_ATTR) then
-						local currentText = tostring(obj.Text or "")
-						-- Check if it has the old name
-						if string.find(currentText, oldFakeName, 1, true) then
-							local newText = currentText:gsub(esc(oldFakeName), newFakeName)
-							obj.Text = newText
-						end
-					end
-				end
+				-- We must Stop/Start to replace the old hooks/text
+				Stop()
+				Start()
 			end
 		end)
 		
@@ -223,3 +208,4 @@ do
 		return { Name = "ClientNameSpoofer", Stop = Stop }
 	end
 end
+print('new version')
