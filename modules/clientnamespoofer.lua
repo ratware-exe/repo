@@ -20,7 +20,6 @@ do
 		}
 
 		-- === Backup (Run this ONCE, as early as possible) ===================
-		-- This is your 'OriginalValues' logic, guarded so it only runs once
 		local function ensureBackup()
 			if GlobalEnv.NameSpoofBackup or not LocalPlayer then return end
 			pcall(function()
@@ -41,7 +40,6 @@ do
 
 			Backup = GlobalEnv.NameSpoofBackup, 
 			Config = GlobalEnv.NameSpoofConfig,
-			-- Snapshots are removed, we will use the original script's logic
 		}
 
 		local BLANKS = {
@@ -89,12 +87,11 @@ do
 				end
 
 				local conn = obj:GetPropertyChangedSignal("Text"):Connect(function()
-					if not Variables.RunFlag then return end -- Don't run if toggled off
+					if not Variables.RunFlag then return end 
 					
 					task.wait()
 					local newText = tostring(obj.Text or "")
 
-					-- Re-apply spoof (using the LIVE config)
 					if string.find(newText, Variables.Backup.Name, 1, true) then
 						obj.Text = (newText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName))
 					elseif string.find(newText, Variables.Backup.DisplayName, 1, true) then
@@ -103,7 +100,7 @@ do
 						obj.Text = (newText:gsub(esc(tostring(Variables.Backup.UserId)), tostring(Variables.Config.FakeId)))
 					end
 				end)
-				Variables.Maids.NameSpoofer:GiveTask(conn) -- Replaces 'table.insert(activeConnections)'
+				Variables.Maids.NameSpoofer:GiveTask(conn) 
 			end
 		end
 
@@ -119,7 +116,7 @@ do
 				end
 
 				local conn = obj:GetPropertyChangedSignal("Image"):Connect(function()
-					if not Variables.RunFlag then return end -- Don't run if toggled off
+					if not Variables.RunFlag then return end 
 
 					task.wait()
 					local newImage = tostring(obj.Image or "")
@@ -133,33 +130,31 @@ do
 			end
 		end
 
-		-- === Hooks (From your original script) ================================
-		-- This function will re-apply spoofing to all text, which we need when a value changes
+		-- === Hooks (Targeted) ================================
+		-- This function will re-apply spoofing, but ONLY to CoreGui and PlayerList
 		local function rescanAllText()
-			for _, obj in pairs(game:GetDescendants()) do
+			local playerList = CoreGui:FindFirstChild("PlayerList")
+			
+			-- Rescan CoreGui
+			for _, obj in pairs(CoreGui:GetDescendants()) do
 				if obj:GetAttribute("TextReplaced") then
 					obj:SetAttribute("TextReplaced", nil)
 				end
-				-- Re-run the replacement, which will use the new config
 				replaceTextInObject(obj)
+			end
+			
+			-- Rescan PlayerList
+			if playerList then
+				for _, obj in pairs(playerList:GetDescendants()) do
+					if obj:GetAttribute("TextReplaced") then
+						obj:SetAttribute("TextReplaced", nil)
+					end
+					replaceTextInObject(obj)
+				end
 			end
 		end
 		
-		local function setupGlobalHook()
-			for _, obj in pairs(game:GetDescendants()) do
-				if obj:GetAttribute("TextReplaced") then obj:SetAttribute("TextReplaced", nil) end
-				if obj:GetAttribute("ImageReplaced") then obj:SetAttribute("ImageReplaced", nil) end
-				replaceTextInObject(obj)
-				replaceImageInObject(obj)
-			end
-
-			local conn = game.DescendantAdded:Connect(function(obj)
-				if not Variables.RunFlag then return end
-				replaceTextInObject(obj)
-				replaceImageInObject(obj)
-			end)
-			Variables.Maids.NameSpoofer:GiveTask(conn)
-		end
+		-- DELETED setupGlobalHook() -- This was the problem.
 
 		local function hookPlayerList()
 			local playerList = CoreGui:FindFirstChild("PlayerList")
@@ -195,13 +190,13 @@ do
 
 		-- === Lifecycle ======================================================
 		local function Start()
-			if Variables.RunFlag then return end -- Don't run if already running
+			if Variables.RunFlag then return end 
 			Variables.RunFlag = true
 			
 			killOldStandaloneUi()
 			applyPlayerFields()
 
-			setupGlobalHook()
+			-- setupGlobalHook() -- REMOVED
 			hookPlayerList()
 			hookCoreGui()
 
@@ -214,9 +209,16 @@ do
 
 			Variables.Maids.NameSpoofer:DoCleaning() -- Disconnects all hooks
 
-			-- We must manually restore text, as the original script had no restore
-			-- This is the only way to make a toggle "off" work
-			for _, obj in pairs(game:GetDescendants()) do
+			-- We must manually restore text, but only in the hooked areas
+			local playerList = CoreGui:FindFirstChild("PlayerList")
+			local areas = { CoreGui:GetDescendants() }
+			if playerList then
+				for _, obj in ipairs(playerList:GetDescendants()) do
+					table.insert(areas, obj)
+				end
+			end
+
+			for _, obj in pairs(areas) do
 				if obj:GetAttribute("TextReplaced") then
 					pcall(function()
 						local text = tostring(obj.Text or "")
@@ -231,7 +233,6 @@ do
 					obj:SetAttribute("TextReplaced", nil)
 				end
 				if obj:GetAttribute("ImageReplaced") then
-					-- Image restore is harder, for now just remove attribute
 					obj:SetAttribute("ImageReplaced", nil)
 				end
 			end
@@ -287,22 +288,19 @@ do
 		end)
 
 		-- === Inputs → live config ===========================================
-		-- This is the new, fixed logic.
-		-- It ONLY updates the config and then calls the correct function.
-		-- It does NOT call Start(), which was the bug.
 		
 		UI.Options.CNS_DisplayName:OnChanged(function(v)
 			Variables.Config.FakeDisplayName = v or ""
 			if Variables.RunFlag then
-				applyPlayerFields() -- Update player object
-				rescanAllText()   -- Rescan UI to apply new name
+				applyPlayerFields()
+				rescanAllText()   
 			end
 		end)
 		
 		UI.Options.CNS_Username:OnChanged(function(v)
 			Variables.Config.FakeName = v or ""
 			if Variables.RunFlag then
-				rescanAllText() -- Rescan UI to apply new name
+				rescanAllText() 
 			end
 		end)
 		
@@ -315,14 +313,13 @@ do
 			end
 			
 			if Variables.RunFlag then
-				applyPlayerFields() -- Update player object
-				rescanAllText()   -- Rescan UI to apply new ID
+				applyPlayerFields() 
+				rescanAllText()   
 			end
 		end)
 		
 		UI.Toggles.CNS_BlankPfp:OnChanged(function(val)
 			Variables.Config.BlankProfilePicture = val and true or false
-			-- No rescan needed, new hooks will handle it
 		end)
 		
 		UI.Toggles.CNS_Enable:OnChanged(function(enabledState)
