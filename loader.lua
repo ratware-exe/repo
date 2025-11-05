@@ -32,8 +32,11 @@ do
     })
 
     local Tabs = {
+        EXP = Window:AddTab("EXP", "tractor"),
+    	Dupe = Window:AddTab("Dupe", "dollar-sign"),
         Visuals = Window:AddTab("Visuals", "eye"),
-        Misc     = Window:AddTab("Misc", "dice-4"),
+        Misc = Window:AddTab("Misc", "dice-4"),
+        Debug = Window:AddTab("Debug", "bug-off"),
         Settings = Window:AddTab("Settings", "settings"),
     }
 
