@@ -13,16 +13,16 @@ do
 
 		-- === State ==========================================================
 		GlobalEnv.NameSpoofConfig = GlobalEnv.NameSpoofConfig or {
-			FakeDisplayName 	 = "NameSpoof", -- For leaderboard
-			FakeName 			 = "NameSpoof", -- For TextLabels (your 'getgenv().name')
+			FakeDisplayName 	 = "NameSpoof", -- For leaderboard ONLY
+			FakeName 			 = "NameSpoof", -- This is the 'getgenv().name' from your script
 		}
 
-		-- === Backup (Run this ONCE, as early as possible) ===================
+		-- === Backup (Run this ONCE) ===================
 		local function ensureBackup()
 			if GlobalEnv.NameSpoofBackup or not LocalPlayer then return end
 			pcall(function()
 				GlobalEnv.NameSpoofBackup = {
-					Name 				= LocalPlayer.Name, -- This is your 'Plr.Name'
+					Name 				= LocalPlayer.Name, -- Your 'Plr.Name'
 					DisplayName 		= LocalPlayer.DisplayName, -- For leaderboard
 				}
 			end)
@@ -35,6 +35,9 @@ do
 			RunFlag = false, -- For toggle
 			Backup = GlobalEnv.NameSpoofBackup, 
 			Config = GlobalEnv.NameSpoofConfig,
+			
+			-- We store the 'Active' name so Stop() knows what to replace
+			ActiveConfig = { FakeName = "" } 
 		}
 
 		local OUR_INPUT_ATTR = "CNS_Ignore"
@@ -60,7 +63,8 @@ do
 
 		-- === Core Spoof Logic (1:1 with your script) ========================
 		
-		-- This is the function inside your 'GetPropertyChangedSignal' and 'DescendantAdded'
+		-- This is the function inside your 'GetPropertyChangedSignal'
+		-- It ONLY replaces Name with FakeName.
 		local function replaceText(obj)
 			if not Variables.RunFlag or not obj or not obj:IsA("TextLabel") then return end
 			if obj:GetAttribute(OUR_INPUT_ATTR) then return end
@@ -113,6 +117,9 @@ do
 			if Variables.RunFlag then return end 
 			Variables.RunFlag = true
 			
+			-- Store the name we are applying, so Stop() can find it
+			Variables.ActiveConfig.FakeName = Variables.Config.FakeName
+			
 			killOldStandaloneUi()
 			applyPlayerFields() -- Apply leaderboard name
 			hookGlobal() -- Apply TextLabel hooks
@@ -132,8 +139,8 @@ do
 				if obj:IsA("TextLabel") then
 					local currentText = tostring(obj.Text or "")
 					
-					-- Reverse the gsub to restore original text
-					local newText = currentText:gsub(esc(Variables.Config.FakeName), Variables.Backup.Name)
+					-- Restore by replacing the *active* fake name with the backup
+					local newText = currentText:gsub(esc(Variables.ActiveConfig.FakeName), Variables.Backup.Name)
 					
 					if currentText ~= newText then
 						obj.Text = newText
@@ -176,6 +183,7 @@ do
 
 		-- === Inputs → live config ===========================================
 		
+		-- This input is SEPARATE. It only affects the leaderboard.
 		UI.Options.CNS_DisplayName:OnChanged(function(v)
 			Variables.Config.FakeDisplayName = v or ""
 			if Variables.RunFlag then
@@ -183,21 +191,13 @@ do
 			end
 		end)
 		
+		-- This input is SEPARATE. It only affects TextLabels.
 		UI.Options.CNS_Username:OnChanged(function(v)
 			Variables.Config.FakeName = v or ""
-			-- No 'Stop/Start' needed. The hooks are already dynamic.
-			-- We just need to re-scan existing text to apply the change.
 			if Variables.RunFlag then
-				for _, obj in pairs(game:GetDescendants()) do
-					if obj:IsA("TextLabel") then
-						-- This is a bit brute-force, but it forces the update
-						-- We restore the original name first
-						local currentText = tostring(obj.Text or "")
-						local restoredText = currentText:gsub(esc(Variables.Backup.Name), Variables.Backup.Name)
-						-- Then we re-apply the new fake name
-						obj.Text = restoredText:gsub(esc(Variables.Backup.Name), Variables.Config.FakeName)
-					end
-				end
+				-- We must Stop/Start to replace the old hooks/text
+				Stop()
+				Start()
 			end
 		end)
 		
@@ -206,6 +206,6 @@ do
 		end)
 
 		-- === Module API =====================================================
-		return { Name = "ClientNameSpoofer", Stop = Stop }
+		return { Name = "ClientNameSpoof", Stop = Stop }
 	end
 end
