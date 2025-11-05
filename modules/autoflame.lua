@@ -1,5 +1,5 @@
 
--- modules/auto_flame.lua
+-- modules/autoflame.lua
 do
     return function(UI)
         -- Dependencies
