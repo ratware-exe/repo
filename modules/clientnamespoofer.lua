@@ -554,6 +554,20 @@ do
         ----------------------------------------------------------------------
         -- UI (using repo’s UI contract passed as `UI`)
         ----------------------------------------------------------------------
+         nameBox:AddToggle("AvatarCopyToggle", {
+            Text    = "Copy Profile (PFP + Names)",
+            Tooltip = "Copies another player's avatar picture and names (enter target below).",
+            Default = false,
+        })
+        
+        nameBox:AddInput("AvatarCopyTarget", {
+            Text        = "Target Username or UserId",
+            Placeholder = "name or 123456",
+            Default     = "",
+            ClearTextOnFocus = false,
+            Tooltip     = "Type a username (with or without @) or a numeric userId.",
+        })
+        
         -- Name spoof controls
         local nameBox = UI.Tabs.Misc:AddLeftGroupbox("Name Spoofer", "user")
         nameBox:AddToggle("NameSpoofToggle", {
@@ -578,25 +592,11 @@ do
             ClearTextOnFocus = false,
             Tooltip     = "Used in places like @username.",
         })
-
-        -- Avatar tools
-        local avatarBox = UI.Tabs.Misc:AddLeftGroupbox("Avatar Tools", "image")
-        avatarBox:AddToggle("AvatarBlankToggle", {
+        
+        nameBox:AddToggle("AvatarBlankToggle", {
             Text    = "Blank Profile Picture",
             Tooltip = "Hides your avatar headshot in UI elements (reversible).",
             Default = false,
-        })
-        avatarBox:AddToggle("AvatarCopyToggle", {
-            Text    = "Copy Profile (PFP + Names)",
-            Tooltip = "Copies another player's avatar picture and names (enter target below).",
-            Default = false,
-        })
-        avatarBox:AddInput("AvatarCopyTarget", {
-            Text        = "Target Username or UserId",
-            Placeholder = "name or 123456",
-            Default     = "",
-            ClearTextOnFocus = false,
-            Tooltip     = "Type a username (with or without @) or a numeric userId.",
         })
 
         ----------------------------------------------------------------------
