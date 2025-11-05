@@ -203,7 +203,7 @@ do
 			end
 		end)
 		
-		UI.TSoggles.CNS_Enable:OnChanged(function(enabledState)
+		UI.Toggles.CNS_Enable:OnChanged(function(enabledState)
 			if enabledState then Start() else Stop() end
 		end)
 
