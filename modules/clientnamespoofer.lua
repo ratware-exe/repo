@@ -1,4 +1,4 @@
-print('new module')
+-- modules/namespoofer.lua
 do
     return function(UI)
         ----------------------------------------------------------------------
@@ -84,6 +84,19 @@ do
             local h = tonumber(meta and meta.h) or 420
             local t = (meta and meta.typ) or "AvatarHeadShot"
             return string.format("rbxthumb://type=%s&id=%d&w=%d&h=%d", t, uid, w, h)
+        end
+
+        -- NEW: swap only the user id in the existing thumbnail URL, preserving all other params.
+        local function rewriteUserIdInUrl(url, newUid)
+            if type(url) ~= "string" or url == "" or not newUid then return nil end
+            local replaced, n = url:gsub("([?&]id=)%d+", "%1" .. newUid)
+            if n == 0 then
+                replaced, n = url:gsub("([?&][Uu]ser[Ii]d=)%d+", "%1" .. newUid)
+            end
+            if n > 0 then
+                return replaced
+            end
+            return nil
         end
 
         local SizeList = { 420, 352, 180, 150, 100, 60, 48 }
@@ -200,44 +213,57 @@ do
         end
 
         ----------------------------------------------------------------------
-        -- Avatar images: track/apply  (uses preserved type/size)
+        -- Avatar images: track/apply (uses preserved URL; only userId swapped)
         ----------------------------------------------------------------------
         local function applyAvatarToImage(img, lp)
             if not (img and img.Parent) then return end
             local avatar = Variables.Avatar
 
             if avatar.Originals[img] == nil then
-                avatar.Originals[img] = { Image = img.Image, ImageTransparency = img.ImageTransparency }
+                avatar.Originals[img] = {
+                    Image = img.Image,
+                    ImageTransparency = img.ImageTransparency,
+                }
             end
 
             avatar.Guards[img] = true
             local ok, err = pcall(function()
                 if avatar.EnabledCopy and avatar.CopyUserId then
-                    local src  = avatar.Originals[img] and avatar.Originals[img].Image or img.Image
-                    local meta = parseThumbMeta(src)
-                    if meta then
-                        img.Image = buildRbxThumb(avatar.CopyUserId, meta)
+                    -- Preserve the original URL composition: only swap the user id token.
+                    local src = (avatar.Originals[img] and avatar.Originals[img].Image) or img.Image
+                    local swapped = rewriteUserIdInUrl(src, avatar.CopyUserId)
+
+                    if swapped then
+                        img.Image = swapped
                         img.ImageTransparency = 0
                     else
-                        -- fallback: nearest enum size & same general type guess
-                        local L = tolower(src or "")
-                        local typ = "AvatarHeadShot"
-                        if string.find(L, "avatar%-bust") or string.find(L, "type=avatarbust") then
-                            typ = "AvatarBust"
-                        elseif string.find(L, "avatar%-thumbnail") or string.find(L, "type=avatarthumbnail") then
-                            typ = "AvatarThumbnail"
-                        end
-                        local w = tonumber(src and (src:match("[?&]w=(%d+)") or src:match("[?&]width=(%d+)"))) or 420
-                        local thumbType = ThumbnailTypeMap[typ] or Enum.ThumbnailType.HeadShot
-                        local sizeEnum  = nearestSize(w)
-                        local content, _ = Players:GetUserThumbnailAsync(avatar.CopyUserId, thumbType, sizeEnum)
-                        if content and content ~= "" then
-                            img.Image = content
+                        -- Fallback: match type/size heuristically
+                        local meta = parseThumbMeta(src)
+                        if meta then
+                            img.Image = buildRbxThumb(avatar.CopyUserId, meta)
                             img.ImageTransparency = 0
+                        else
+                            local L = tolower(src or "")
+                            local typ = "AvatarHeadShot"
+                            if string.find(L, "avatar%-bust") or string.find(L, "type=avatarbust") then
+                                typ = "AvatarBust"
+                            elseif string.find(L, "avatar%-thumbnail") or string.find(L, "type=avatarthumbnail") then
+                                typ = "AvatarThumbnail"
+                            end
+                            local w = tonumber(src and (src:match("[?&]w=(%d+)") or src:match("[?&]width=(%d+)"))) or 420
+                            local thumbType = ThumbnailTypeMap[typ] or Enum.ThumbnailType.HeadShot
+                            local sizeEnum  = nearestSize(w)
+                            local content, _ = Players:GetUserThumbnailAsync(avatar.CopyUserId, thumbType, sizeEnum)
+                            if content and content ~= "" then
+                                img.Image = content
+                                img.ImageTransparency = 0
+                            end
                         end
                     end
+
                 elseif avatar.EnabledBlank then
                     img.ImageTransparency = 1
+
                 else
                     local orig = avatar.Originals[img]
                     if orig then
@@ -247,7 +273,10 @@ do
                 end
             end)
             avatar.Guards[img] = nil
-            if not ok then warn("[NameSpoofer] avatar apply error:", err) end
+
+            if not ok then
+                warn("[NameSpoofer] avatar apply error:", err)
+            end
         end
 
         local function untrackAvatarImage(img)
@@ -440,6 +469,8 @@ do
             return username, displayName
         end
         local function applyCopyProfile(uid)
+            -- Guard: copy profile only works while Name Spoofer is enabled
+            if not Variables.RunFlag then return false end
             if not uid then return false end
             local username, displayName = getNamesForUserId(uid)
             if not username and not displayName then return false end
@@ -522,7 +553,17 @@ do
         ----------------------------------------------------------------------
         -- Wire controls
         ----------------------------------------------------------------------
-        UI.Toggles.NameSpoofToggle:OnChanged(function(state) if state then Start() else Stop() end end)
+        UI.Toggles.NameSpoofToggle:OnChanged(function(state)
+            if state then
+                Start()
+            else
+                -- Force copy profile off when name spoofing is disabled
+                if UI.Toggles.AvatarCopyToggle and UI.Toggles.AvatarCopyToggle.Value then
+                    pcall(function() UI.Toggles.AvatarCopyToggle:SetValue(false) end)
+                end
+                Stop()
+            end
+        end)
 
         UI.Options.NS_Display:OnChanged(function(newDisplay)
             local lp = Players.LocalPlayer
@@ -564,6 +605,17 @@ do
 
         UI.Toggles.AvatarCopyToggle:OnChanged(function(state)
             if state then
+                -- HARD DEPENDENCY: Name spoof must be enabled
+                if not Variables.RunFlag then
+                    warn("[NameSpoofer] Enable Name Spoofer before using Copy Profile.")
+                    pcall(function()
+                        if UI.Toggles.AvatarCopyToggle and UI.Toggles.AvatarCopyToggle.SetValue then
+                            UI.Toggles.AvatarCopyToggle:SetValue(false)
+                        end
+                    end)
+                    return
+                end
+
                 local rawTarget = ""
                 pcall(function()
                     rawTarget = UI.Options.AvatarCopyTarget and UI.Options.AvatarCopyTarget.Value or ""
@@ -573,11 +625,18 @@ do
                     warn("[NameSpoofer] Invalid copy target. Enter username or userId.")
                     Variables.Avatar.EnabledCopy = false
                     if not Variables.Avatar.EnabledBlank then ensureAvatarStopped() end
+                    pcall(function()
+                        if UI.Toggles.AvatarCopyToggle and UI.Toggles.AvatarCopyToggle.SetValue then
+                            UI.Toggles.AvatarCopyToggle:SetValue(false)
+                        end
+                    end)
                     return
                 end
+
                 Variables.Avatar.EnabledCopy = true
                 ensureAvatarRunning()
-                applyCopyProfile(uid)
+                applyCopyProfile(uid) -- sets spoof names + avatar copy
+
             else
                 Variables.Avatar.EnabledCopy = false
                 Variables.Avatar.CopyUserId  = nil
@@ -586,6 +645,7 @@ do
                     Variables.Spoof.DisplayName = Variables.CopyBackup.DisplayName
                     Variables.Spoof.Username    = Variables.CopyBackup.Username
                     Variables.CopyBackup = nil
+
                     local lp = Players.LocalPlayer
                     if Variables.RunFlag and lp then
                         for lbl, _ in pairs(Variables.Originals) do
@@ -594,6 +654,7 @@ do
                             end
                         end
                     end
+
                     pcall(function()
                         if UI.Options and UI.Options.NS_Display and UI.Options.NS_Display.SetValue then
                             UI.Options.NS_Display:SetValue(Variables.Spoof.DisplayName)
@@ -604,12 +665,17 @@ do
                     end)
                 end
 
-                if not Variables.Avatar.EnabledBlank then ensureAvatarStopped() else refreshAllAvatarImages() end
+                if not Variables.Avatar.EnabledBlank then
+                    ensureAvatarStopped()
+                else
+                    refreshAllAvatarImages()
+                end
             end
         end)
 
         UI.Options.AvatarCopyTarget:OnChanged(function(newValue)
             if not Variables.Avatar.EnabledCopy then return end
+            if not Variables.RunFlag then return end
             local uid = resolveTargetUserId(newValue)
             if uid then applyCopyProfile(uid) end
         end)
