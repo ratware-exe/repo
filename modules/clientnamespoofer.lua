@@ -136,9 +136,9 @@ do
 			
 			for _, pat in ipairs(patterns) do
 				-- Check if the pattern needs a second capture group (for paths like /users/123/)
-				local hasSecondGroup = pat:find("%2")
-				local replacement = "%1" .. newUid .. (hasSecondGroup and "%2" or "")
-				
+				local numGroups = select("#", pat:gmatch("%(")) -- THIS IS THE FIX
+				local replacement = "%1" .. newUid .. (numGroups > 1 and "%2" or "") -- THIS IS THE FIX
+
 				local replaced, n = url:gsub(pat, replacement)
 				if n > 0 then
 					return replaced -- Success, return the modified URL
