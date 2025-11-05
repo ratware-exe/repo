@@ -41,6 +41,33 @@ do
         local UserService = RbxService.UserService or game:GetService("UserService")
 
         ----------------------------------------------------------------------
+        -- Obsidian notifications (replaces warn/error)
+        ----------------------------------------------------------------------
+        local function Notify(title, text, kind)
+            title = title or "NameSpoofer"
+            text  = tostring(text or "")
+            kind  = kind or "info"
+            local ok = pcall(function()
+                if UI and UI.Notify then
+                    -- common Obsidian pattern
+                    UI:Notify(title, text, kind)
+                elseif UI and UI.Banner then
+                    UI:Banner(title .. " — " .. text)
+                elseif UI and UI.Notification then
+                    UI:Notification(title, text)
+                else
+                    -- last resort try StarterGui notification
+                    game:GetService("StarterGui"):SetCore("SendNotification", {
+                        Title = title, Text = text, Duration = 4
+                    })
+                end
+            end)
+            if not ok then
+                -- swallow silently if notifications are unavailable
+            end
+        end
+
+        ----------------------------------------------------------------------
         -- Helpers: thumbnail parsing / building so copied PFP matches original type & size
         ----------------------------------------------------------------------
         local function tolower(s) return (s and string.lower(s)) or "" end
@@ -86,7 +113,7 @@ do
             return string.format("rbxthumb://type=%s&id=%d&w=%d&h=%d", t, uid, w, h)
         end
 
-        -- NEW: swap only the user id in the existing thumbnail URL, preserving all other params.
+        -- swap only the user id in the existing thumbnail URL, preserving all other params.
         local function rewriteUserIdInUrl(url, newUid)
             if type(url) ~= "string" or url == "" or not newUid then return nil end
             local replaced, n = url:gsub("([?&]id=)%d+", "%1" .. newUid)
@@ -168,7 +195,7 @@ do
             Variables.Guards[lbl] = true
             local ok, err = pcall(function() lbl.Text = replaceNames(raw, lp) end)
             Variables.Guards[lbl] = nil
-            if not ok then warn("[NameSpoofer] apply error:", err) end
+            if not ok then Notify("NameSpoofer", "Label apply error: " .. tostring(err), "error") end
         end
 
         local function untrackLabel(lbl)
@@ -275,7 +302,7 @@ do
             avatar.Guards[img] = nil
 
             if not ok then
-                warn("[NameSpoofer] avatar apply error:", err)
+                Notify("NameSpoofer", "Avatar apply error: " .. tostring(err), "error")
             end
         end
 
@@ -607,7 +634,7 @@ do
             if state then
                 -- HARD DEPENDENCY: Name spoof must be enabled
                 if not Variables.RunFlag then
-                    warn("[NameSpoofer] Enable Name Spoofer before using Copy Profile.")
+                    Notify("NameSpoofer", "Enable Name Spoofer before using Copy Profile.", "warn")
                     pcall(function()
                         if UI.Toggles.AvatarCopyToggle and UI.Toggles.AvatarCopyToggle.SetValue then
                             UI.Toggles.AvatarCopyToggle:SetValue(false)
@@ -622,7 +649,7 @@ do
                 end)
                 local uid = resolveTargetUserId(rawTarget)
                 if not uid then
-                    warn("[NameSpoofer] Invalid copy target. Enter username or userId.")
+                    Notify("NameSpoofer", "Invalid copy target. Enter username or userId.", "warn")
                     Variables.Avatar.EnabledCopy = false
                     if not Variables.Avatar.EnabledBlank then ensureAvatarStopped() end
                     pcall(function()
