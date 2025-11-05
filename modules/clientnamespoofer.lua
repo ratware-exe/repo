@@ -44,29 +44,33 @@ do
         -- Obsidian notifications (replaces warn/error)
         ----------------------------------------------------------------------
         local function Notify(title, text, kind)
-            title = title or "NameSpoofer"
-            text  = tostring(text or "")
-            kind  = kind or "info"
-            local ok = pcall(function()
-                if UI and UI.Notify then
-                    -- common Obsidian pattern
-                    UI:Notify(title, text, kind)
-                elseif UI and UI.Banner then
-                    UI:Banner(title .. " — " .. text)
-                elseif UI and UI.Notification then
-                    UI:Notification(title, text)
-                else
-                    -- last resort try StarterGui notification
-                    game:GetService("StarterGui"):SetCore("SendNotification", {
-                        Title = title, Text = text, Duration = 4
-                    })
-                end
-            end)
-            if not ok then
-                -- swallow silently if notifications are unavailable
+            -- Map to Obsidian's Library:Notify({...}) signature
+            local lib = UI and (UI.Library or UI.Lib or UI.library or UI.lib)
+            if not (lib and lib.Notify) then
+                return -- No fallbacks; use Obsidian notifications only
             end
-        end
 
+            title = tostring(title or "NameSpoofer")
+            text  = tostring(text or "")
+            kind  = tostring(kind or "info")
+
+            -- decorate title with severity (purely cosmetic)
+            local level = (kind == "error" and "Error")
+                       or (kind == "warn"  and "Warning")
+                       or nil
+            local finalTitle = level and (title .. " — " .. level) or title
+
+            -- Table-style call per Obsidian docs:
+            -- Library:Notify({ Title = "...", Description = "...", Time = 4 })
+            pcall(function()
+                lib:Notify({
+                    Title       = finalTitle,
+                    Description = text,
+                    Time        = 4,
+                })
+            end)
+        end
+        
         ----------------------------------------------------------------------
         -- Helpers: thumbnail parsing / building so copied PFP matches original type & size
         ----------------------------------------------------------------------
