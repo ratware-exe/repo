@@ -18,10 +18,16 @@ do
       LastPulseTime = 0,
       Accumulated = 0,
 
-      Nevermore = nil,
       ClientBinders = nil,
       LastTrigger = nil,
     }
+
+    local function GetOrCreateGroup(tab, side, title)
+      local reg = getgenv().UIShared
+      local existing = reg and reg.Find and reg:Find("groupbox", title)
+      if existing then return existing end
+      return (side == "right") and tab:AddRightGroupbox(title) or tab:AddLeftGroupbox(title)
+    end
 
     local function GetLoader()
       local mod = Services.ReplicatedStorage:FindFirstChild("Nevermore") or Services.ReplicatedStorage:WaitForChild("Nevermore")
@@ -209,15 +215,15 @@ do
       Vars.Maids.Main:DoCleaning()
     end
 
-    -- UI
-    local group = UI.Tabs.EXP:AddLeftGroupbox("Single Flame")
-    group:AddToggle("auto_flame_enabled", {
-      Text = "Enable Single Flame",
+    -- UI -> reuse original EXP groupbox
+    local group = GetOrCreateGroup(UI.Tabs.EXP, "left", "EXP Farm")
+    group:AddToggle("AutoFlamethrowerToggle", {
+      Text = "Single Flame",
       Default = false,
       Callback = function(on) if on then Start() else Stop() end end,
     })
     group:AddSlider("auto_flame_rate", {
-      Text = "Fire Rate (Hz)",
+      Text = "Single Flame: Fire Rate (Hz)",
       Default = Vars.FireRateHertz, Min = 1, Max = 60, Rounding = 0,
       Callback = function(v) Vars.FireRateHertz = math.floor(tonumber(v) or Vars.FireRateHertz) end
     })
