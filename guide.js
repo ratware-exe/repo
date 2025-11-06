@@ -87,6 +87,7 @@ do
 end
 
 UI & REGISTRY USAGE RULES (VERY IMPORTANT)
+• Obsidian UI Documentation: https://docs.mspaint.cc/obsidian
 • Stable IDs: For any element that accepts an ID (toggle/checkbox/input/slider/dropdown/keybind/colorpicker/viewport/image/video/ui‑passthrough), choose a short, stable, unique string (e.g., "modname_feature_toggle").
 • Buttons & Labels dedupe by Text when no ID is available; use consistent Text if you intend reuse.
 • Reusing an element from another module is automatic:
@@ -123,6 +124,7 @@ EXECUTOR‑AWARENESS (IF NEEDED)
 
 PERFORMANCE & UX
 • Prefer O(1) work per frame; chunk heavy traversals across multiple frames if needed.
+• ALWAYS optimize the script with obfuscation later down the line in mind (avoid FPS or per-frame demanding loops)
 • Debounce/guard expensive callbacks.
 • Use Obsidian notifications/settings sparingly and respect its keybind menu toggle.
 
@@ -158,4 +160,15 @@ QUALITY CHECKLIST (AUTHOR MUST SELF‑VERIFY)
 [ ] Start/Stop present; all resources registered to Maid and cleaned
 [ ] Works across reruns (multi‑session); does not hold stale references
 [ ] Graceful degradation if optional APIs are missing
-[ ] No ToS‑violating behavior added
+
+GENERAL VARIABLE STYLE:
+• Do not abbreviate variables, always spell them out entirely (For example, DO NOT use "lp" for "LocalPlayer")
+• Do not use gibberish variables that are meaningless. Use variables with names that are meaningful to their function (For example, DO NOT use "sg" for "ScreenGui")
+
+🔧 Notes tailored to MY REPO "https://raw.githubusercontent.com/ratware-exe/repo/main/":
+You don’t need to mention the registry internals in normal modules—just use stable IDs and the wrappers will dedupe and share elements across modules within the current run.
+If two modules both create "my_feature_enabled", both receive the same Toggle and each module’s Callback is appended automatically.
+For reading values elsewhere, prefer getgenv().Toggles[ID] and getgenv().Options[ID]. For elements that don’t live in those registries (e.g., Buttons), use getgenv().UIShared:Find(kind, key) where kind ∈ {label,button,toggle,checkbox,input,slider,dropdown,keybind,colorpicker,divider,viewport,image,video,uipass,groupbox,tabbox,tab} and key is the ID or __name__:Text.
+
+PLEASE MODIFY THE SCRIPT ATTACHED TO THIS MESSAGE -OR- MODIFY THE SCRIPT PASTED BELOW INTO A MODULE INTEGRATED INTO MY REPO:
+Script:
