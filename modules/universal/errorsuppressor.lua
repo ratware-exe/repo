@@ -1,4 +1,5 @@
 -- modules/errorsuppressor.lua
+print('new')
 do
     return function(ui)
         -- deps
