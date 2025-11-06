@@ -55,10 +55,17 @@ do
         end
 
         local function SnapshotMine(uid)
-            local snap={}, f=Boats(); if not f then return snap end
-            for _,m in ipairs(f:GetChildren()) do if m:IsA("Model") and OwnerUserId(m)==uid then snap[m]=true end end
+            -- FIX: one '='; comma-separated variables and values
+            local snap, f = {}, Boats()
+            if not f then return snap end
+            for _, m in ipairs(f:GetChildren()) do
+                if m:IsA("Model") and OwnerUserId(m) == uid then
+                    snap[m] = true
+                end
+            end
             return snap
         end
+
         local function WaitNew(uid, before, timeout)
             local deadline=time()+(timeout or 12)
             while time()<deadline do
