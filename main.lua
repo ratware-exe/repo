@@ -14,7 +14,7 @@ do
     local featurePaths = {
         -- If you split Shield out earlier, put it first:
         "dependency/UIRegistry.lua",
-        "modules/shield.lua",
+        "modules/wfyb/shield.lua",
         "modules/wfyb/propexp.lua",
         "modules/wfyb/autoflame.lua",
         "modules/wfyb/repairall.lua",
