@@ -1,5 +1,4 @@
--- dependency/UIRegistry.lua
-print('new test')
+print('new')
 do
   return function(UI)
     -- Shared deps (your system)
@@ -62,18 +61,18 @@ do
           image       = {},
           video       = {},
           uipass      = {},
-          groupbox    = {}, -- "__name__:Title" → Groupbox (first seen; for Find convenience)
+          groupbox    = {}, -- "__name__:Title" → Groupbox
           tabbox      = {}, -- "__name__:Title" → Tabbox
           tab         = {}, -- "__name__:Name"  → Tab
         },
         ButtonSignals = {},
         -- Canonical maps
-        _canonicalTabs   = {}, -- name → canonical tab wrapper (stable)
+        _canonicalTabs   = {},
         _perTab = {
-          groupboxes = setmetatable({}, { __mode = "k" }), -- tab → { [title]=groupbox }
-          tabboxes   = setmetatable({}, { __mode = "k" }), -- tab → { [title]=tabbox }
+          groupboxes = setmetatable({}, { __mode = "k" }),
+          tabboxes   = setmetatable({}, { __mode = "k" }),
         },
-        _tabboxTabs = setmetatable({}, { __mode = "k" }),  -- tabbox → { [title]=groupbox }
+        _tabboxTabs = setmetatable({}, { __mode = "k" }),
         _patched = {
           tabs       = setmetatable({}, { __mode = "k" }),
           tabboxes   = setmetatable({}, { __mode = "k" }),
@@ -201,7 +200,7 @@ do
         else
           text, func = arg1, arg2
         end
-        local key = id_or_text_key("button", nil, cfg, text) -- dedupe by text
+        local key = id_or_text_key("button", nil, cfg, text)
         if key and Shared.Elements.button[key] then
           if type(func) == "function" then
             local sig = Shared.ButtonSignals[key]
@@ -223,11 +222,19 @@ do
           if ok and conn then M:GiveTask(conn) end
         end
         local function aggregator(...)
-          local ok, err = pcall(function() sig:Fire(...) end)
+          local args = table.pack(...)
+          local ok, err = pcall(function()
+            sig:Fire(table.unpack(args, 1, args.n))
+          end)
           if not ok then warn(err) end
         end
         local el
-        if cfg then cfg.Func = aggregator; el = orig(self, cfg) else el = orig(self, text, aggregator) end
+        if cfg then
+          cfg.Func = aggregator
+          el = orig(self, cfg)
+        else
+          el = orig(self, text, aggregator)
+        end
         if key then remember("button", key, el) end
         patch_button_host(el) -- nested buttons
         return el
@@ -277,7 +284,11 @@ do
         local orig = box.AddButton
         box.AddButton = function(self, arg1, arg2)
           local cfg, text, func
-          if type(arg1) == "table" then cfg = clone(arg1); text, func = cfg.Text, cfg.Func else text, func = arg1, arg2 end
+          if type(arg1) == "table" then
+            cfg = clone(arg1); text, func = cfg.Text, cfg.Func
+          else
+            text, func = arg1, arg2
+          end
           local key = id_or_text_key("button", nil, cfg, text)
           if key and Shared.Elements.button[key] then
             if type(func) == "function" then
@@ -299,9 +310,20 @@ do
             local ok, conn = pcall(function() return sig:Connect(func) end)
             if ok and conn then M:GiveTask(conn) end
           end
-          local function aggregator(...) local ok, err = pcall(function() sig:Fire(...) end); if not ok then warn(err) end end
+          local function aggregator(...)
+            local args = table.pack(...)
+            local ok, err = pcall(function()
+              sig:Fire(table.unpack(args, 1, args.n))
+            end)
+            if not ok then warn(err) end
+          end
           local el
-          if cfg then cfg.Func = aggregator; el = orig(self, cfg) else el = orig(self, text, aggregator) end
+          if cfg then
+            cfg.Func = aggregator
+            el = orig(self, cfg)
+          else
+            el = orig(self, text, aggregator)
+          end
           if key then remember("button", key, el) end
           patch_button_host(el)
           return el
@@ -557,7 +579,6 @@ do
               return existing
             end
           end
-          -- forward icon (and any future extra args) to preserve Lucide support
           local gb = orig(self, title, icon, ...)
           patch_groupbox(gb)
           if type(title) == "string" and title ~= "" then
@@ -654,15 +675,10 @@ do
     local canon_mt = {}
 
     canon_mt.__index = function(_, k)
-      -- return cached canonical instance if present
       local cached = Shared._canonicalTabs[k]
       if cached then return cached end
-
-      -- pull one wrapper from the raw table
       local raw = RawTabs and RawTabs[k]
       if raw == nil then return nil end
-
-      -- Patch the pulled wrapper and cache as canonical for this key
       if type(raw) == "table" then
         patch_tab(raw, k)
       end
@@ -670,7 +686,6 @@ do
       return raw
     end
 
-    -- iterate yielding canonical wrappers (important for modules that do pairs(UI.Tabs))
     canon_mt.__pairs = function()
       local keys = {}
       for k in pairs(RawTabs or {}) do table.insert(keys, k) end
@@ -679,11 +694,10 @@ do
         i = i + 1
         local k = keys[i]
         if not k then return end
-        return k, CanonTabs[k] -- triggers __index to return canonical
+        return k, CanonTabs[k]
       end
     end
 
-    -- safety: preserve length semantics if used
     canon_mt.__len = function()
       local n = 0
       for _ in pairs(RawTabs or {}) do n = n + 1 end
@@ -706,14 +720,9 @@ do
     -- Session Stop (unload)
     ---------------------------------------------------------------------------
     local function Stop()
-      -- restore tabs table to original for safety (this session only)
       UI.Tabs = OriginalTabs
       G.Tabs  = UI.Tabs
-
-      -- restore patched methods and disconnect handlers for THIS session
       M:DoCleaning()
-
-      -- remove this session from the manager
       local mgr = rawget(G, "UISharedManager")
       if mgr and mgr.Sessions then
         mgr.Sessions[SessionId] = nil
