@@ -540,22 +540,22 @@ do
         ----------------------------------------------------------------------
         -- UI: everything in ONE groupbox
         ----------------------------------------------------------------------
-        local groupbox = UI.Tabs.Misc:AddLeftGroupbox("Name & Avatar Spoofer", "user")
+        local namespoofgroupbox = UI.Tabs.Misc:AddLeftGroupbox("Name & Avatar Spoofer", "user")
 
         -- Name spoofing
-        groupbox:AddToggle("NameSpoofToggle", {
+        namespoofgroupbox:AddToggle("NameSpoofToggle", {
             Text = "Enable Name Spoofer",
             Tooltip = "Spoofs Display Name and @username locally (reversible).",
             Default = false,
         })
-        groupbox:AddInput("NS_Display", {
+        namespoofgroupbox:AddInput("NS_Display", {
             Text = "Spoof Display Name",
             Placeholder = Players.LocalPlayer and Players.LocalPlayer.DisplayName or "DisplayName",
             Default = Players.LocalPlayer and Players.LocalPlayer.DisplayName or "",
             ClearTextOnFocus = false,
             Tooltip = "Shown on the PlayerList/leaderboard.",
         })
-        groupbox:AddInput("NS_User", {
+        namespoofgroupbox:AddInput("NS_User", {
             Text = "Spoof Username",
             Placeholder = Players.LocalPlayer and Players.LocalPlayer.Name or "Username",
             Default = Players.LocalPlayer and Players.LocalPlayer.Name or "",
@@ -564,17 +564,17 @@ do
         })
 
         -- Avatar tools (same groupbox)
-        groupbox:AddToggle("AvatarBlankToggle", {
+        namespoofgroupbox:AddToggle("AvatarBlankToggle", {
             Text = "Blank Profile Picture",
             Tooltip = "Hides your avatar headshot in UI elements (reversible).",
             Default = false,
         })
-        groupbox:AddToggle("AvatarCopyToggle", {
+        namespoofgroupbox:AddToggle("AvatarCopyToggle", {
             Text = "Copy Profile (PFP + Names)",
             Tooltip = "Copies another player's avatar picture and names.",
             Default = false,
         })
-        groupbox:AddInput("AvatarCopyTarget", {
+        namespoofgroupbox:AddInput("AvatarCopyTarget", {
             Text = "Target Username or UserId",
             Placeholder = "name or 123456",
             Default = "",
