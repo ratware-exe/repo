@@ -35,7 +35,6 @@ HARD REQUIREMENTS
    The registry wraps these at runtime. You must NOT implement your own dedupe layer.
 2) CLEANUP: Every connection, thread, instance, callback, and temporary state MUST be registered with a Maid and torn down in Stop().
 3) NO global pollution (other than reading getgenv() values above). Use locals; return a small API.
-4) SAFETY: Do not add ToS‑violating or exploitative behavior. If an executor‑specific API is optional, feature‑detect gracefully.
 
 MODULE FILE SHAPE (MANDATORY)
 • Location: modules/<lower_snake_or_lowercase_name>.lua
@@ -116,11 +115,6 @@ CLEANUP PATTERN (MANDATORY)
   - Any hooked state that must be reverted
 • In Stop(): Vars.Maids.Main:DoCleaning() and restore all changed properties (camera, humanoid, lighting, sounds, materials, etc.).
 • Avoid hard waits in hot paths. Use RunService (Heartbeat/RenderStepped) and guard logic.
-
-EXECUTOR‑AWARENESS (IF NEEDED)
-• If you rely on optional executor APIs (e.g., hookfunction, getconnections), feature‑detect:
-  if typeof(hookfunction) ~= "function" then warn("hookfunction unavailable; disabling X"); return end
-• Always degrade gracefully without errors.
 
 PERFORMANCE & UX
 • Prefer O(1) work per frame; chunk heavy traversals across multiple frames if needed.
