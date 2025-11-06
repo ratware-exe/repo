@@ -151,5 +151,24 @@ do
         GlobalUnload()
     end
 
+    ---------------------------------------------------------------------------
+    -- === ACTIVATE THE UI REGISTRY ===
+    -- We must load and run the registry HERE.
+    -- This patches the UI (via Api.GetUI()) *before* main.lua gets the
+    -- Api and starts mounting the feature modules.
+    ---------------------------------------------------------------------------
+    do
+        local registryFactory = LoadText("dependency/UIRegistry.lua")
+        local uiContext = Api.GetUI()
+        
+        -- Run the registry's main function, passing it the UI to patch
+        local registryModule = registryFactory(uiContext) or {}
+        
+        -- Add the registry to the mountedModules list so its
+        -- Stop() function gets called on GlobalUnload()
+        table.insert(mountedModules, registryModule)
+    end
+    ---------------------------------------------------------------------------
+
     return Api
 end
