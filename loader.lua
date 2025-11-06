@@ -1,4 +1,5 @@
 -- loader.lua
+print('newloader')
 do
     -- Required globals set by main.lua:
     -- _G.RepoBase           (base raw URL ending with '/')
