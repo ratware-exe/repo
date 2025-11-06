@@ -86,20 +86,20 @@ do
             end
         end
 
-        local group = UI.Tabs.Misc:AddLeftGroupbox("Anti Idle", "user-x")
-        group:AddToggle("AntiIdleEnabled", {
+        local antiafkgroupbox = UI.Tabs.Misc:AddLeftGroupbox("Anti Idle", "user-x")
+        antiafkgroupbox:AddToggle("AntiIdleEnabled", {
             Text = "Enable Anti Idle",
             Tooltip = "Prevents kick for idling. Disables Idled listeners; VirtualUser fallback.",
             Default = false,
         }):OnChanged(function(state)
             if state then StartAll() else StopAll() end
         end)
-        group:AddToggle("AntiIdleDisableIdled", { Text="Disable Idled Connections", Default=Variables.Config.DisableIdledConnections })
+        antiafkgroupbox:AddToggle("AntiIdleDisableIdled", { Text="Disable Idled Connections", Default=Variables.Config.DisableIdledConnections })
             :OnChanged(function(state)
                 Variables.Config.DisableIdledConnections = state
                 if Variables.Config.Enabled and state then DisableExistingIdledConnections() end
             end)
-        group:AddToggle("AntiIdleVirtualUser", { Text="VirtualUser Fallback", Default=Variables.Config.VirtualUserFallback })
+        antiafkgroupbox:AddToggle("AntiIdleVirtualUser", { Text="VirtualUser Fallback", Default=Variables.Config.VirtualUserFallback })
             :OnChanged(function(state)
                 Variables.Config.VirtualUserFallback = state
                 if Variables.Config.Enabled then
@@ -110,12 +110,12 @@ do
                     end
                 end
             end)
-        group:AddToggle("AntiIdlePeriodicNudge", { Text="Periodic Mouse Nudge", Default=Variables.Config.PeriodicNudge })
+        antiafkgroupbox:AddToggle("AntiIdlePeriodicNudge", { Text="Periodic Mouse Nudge", Default=Variables.Config.PeriodicNudge })
             :OnChanged(function(state)
                 Variables.Config.PeriodicNudge = state
                 if Variables.Config.Enabled then if state then StartPeriodicNudge() end end
             end)
-        group:AddSlider("AntiIdleNudgeInterval", { Label="Nudge Interval", Min=10, Max=180, Default=60, Suffix="sec" })
+        antiafkgroupbox:AddSlider("AntiIdleNudgeInterval", { Label="Nudge Interval", Min=10, Max=180, Default=60, Suffix="sec" })
             :OnChanged(function(value) Variables.Config.NudgeIntervalSeconds = math.floor(value) end)
 
         local function ModuleStop()
