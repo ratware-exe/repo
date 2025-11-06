@@ -560,14 +560,14 @@ local function freezeWorldPart(inst)
     if not inst:IsA("BasePart") then return end
     local char = RbxService.Players.LocalPlayer and RbxService.Players.LocalPlayer.Character
     if char and inst:IsDescendantOf(char) then return end
-    if inst:GetAttribute("WFYB_FrozenByOptimization") then return end
+    if inst:GetAttribute("FrozenByOptimization") then return end
 
     storeOnce(Variables.Snapshot.PartAnchored, inst, inst.Anchored)
     pcall(function()
         inst.AssemblyLinearVelocity  = Vector3.new()
         inst.AssemblyAngularVelocity = Vector3.new()
         inst.Anchored = true
-        inst:SetAttribute("WFYB_FrozenByOptimization", true)
+        inst:SetAttribute("FrozenByOptimization", true)
     end)
 end
 
@@ -578,7 +578,7 @@ local function restoreAnchoredParts()
         pcall(function()
             if part and part.Parent then
                 part.Anchored = wasAnchored and true or false
-                part:SetAttribute("WFYB_FrozenByOptimization", nil)
+                part:SetAttribute("FrozenByOptimization", nil)
             end
         end)
         Variables.Snapshot.PartAnchored[part] = nil
@@ -592,10 +592,10 @@ local function restoreAnchoredParts()
     -- Safety sweep
     if not shouldCancel() then
         eachDescendantChunked(RbxService.Workspace,
-            function(x) return x:IsA("BasePart") and x:GetAttribute("WFYB_FrozenByOptimization") == true end,
+            function(x) return x:IsA("BasePart") and x:GetAttribute("FrozenByOptimization") == true end,
             function(p)
                 pcall(function()
-                    p:SetAttribute("WFYB_FrozenByOptimization", nil)
+                    p:SetAttribute("FrozenByOptimization", nil)
                     if Variables.Snapshot.PartAnchored[p] == nil then p.Anchored = false end
                 end)
             end
@@ -992,7 +992,7 @@ local function applyWaterReplacement()
         end
 
         local proxy = Instance.new("Part")
-        proxy.Name = "WFYB_WaterProxy"
+        proxy.Name = "WaterProxy"
         proxy.Anchored = true
         proxy.CanCollide = false
         proxy.Material = Enum.Material.SmoothPlastic
@@ -1413,81 +1413,81 @@ end)()
 
 local group
 if TargetTab and typeof(TargetTab.AddRightGroupbox) == "function" then
-    group = TargetTab:AddRightGroupbox("Optimization", "power")
+    optimizationgroup = TargetTab:AddRightGroupbox("Optimization", "power")
 elseif TargetTab and typeof(TargetTab.AddLeftGroupbox) == "function" then
-    group = TargetTab:AddLeftGroupbox("Optimization", "power")
+    optimizationgroup = TargetTab:AddLeftGroupbox("Optimization", "power")
 else
     -- Last resort: try root UI
-    group = UI.Tabs.Main and UI.Tabs.Main:AddLeftGroupbox("Optimization", "power")
+    optimizationgroup = UI.Tabs.Main and UI.Tabs.Main:AddLeftGroupbox("Optimization", "power")
 end
 
 -- Build controls (no chained :OnChanged!)
-group:AddToggle("OptEnabled", { Text = "Enable Optimization", Default = false, Tooltip = "Master switch" })
+optimizationgroup:AddToggle("OptEnabled", { Text = "Enable Optimization", Default = false, Tooltip = "Master switch" })
 
-group:AddSlider("OptFps", {
+optimizationgroup:AddSlider("OptFps", {
     Text = "Target FPS",
     Min = 1, Max = 120,
     Default = Variables.Config.TargetFramesPerSecond,
     Suffix = "FPS",
 })
 
-group:AddDivider()
-group:AddLabel("Rendering / UI")
+optimizationgroup:AddDivider()
+optimizationgroup:AddLabel("Rendering / UI")
 
-group:AddToggle("Opt3D",             { Text="Disable 3D Rendering",      Default=Variables.Config.DisableThreeDRendering })
-group:AddToggle("OptHidePlayerGui",  { Text="Hide PlayerGui",            Default=Variables.Config.HidePlayerGui })
-group:AddToggle("OptHideCoreGui",    { Text="Hide CoreGui",              Default=Variables.Config.HideCoreGui })
-group:AddToggle("OptNoViewports",    { Text="Disable ViewportFrames",    Default=Variables.Config.DisableViewportFrames })
-group:AddToggle("OptNoVideos",       { Text="Disable VideoFrames",       Default=Variables.Config.DisableVideoFrames })
-group:AddToggle("OptMute",           { Text="Mute All Sounds",           Default=Variables.Config.MuteAllSounds })
+optimizationgroup:AddToggle("Opt3D",             { Text="Disable 3D Rendering",      Default=Variables.Config.DisableThreeDRendering })
+optimizationgroup:AddToggle("OptHidePlayerGui",  { Text="Hide PlayerGui",            Default=Variables.Config.HidePlayerGui })
+optimizationgroup:AddToggle("OptHideCoreGui",    { Text="Hide CoreGui",              Default=Variables.Config.HideCoreGui })
+optimizationgroup:AddToggle("OptNoViewports",    { Text="Disable ViewportFrames",    Default=Variables.Config.DisableViewportFrames })
+optimizationgroup:AddToggle("OptNoVideos",       { Text="Disable VideoFrames",       Default=Variables.Config.DisableVideoFrames })
+optimizationgroup:AddToggle("OptMute",           { Text="Mute All Sounds",           Default=Variables.Config.MuteAllSounds })
 
-group:AddDivider()
-group:AddLabel("Animation / Motion")
+optimizationgroup:AddDivider()
+optimizationgroup:AddLabel("Animation / Motion")
 
-group:AddToggle("OptPauseChar",      { Text="Pause Character Animations", Default=Variables.Config.PauseCharacterAnimations })
-group:AddToggle("OptPauseOther",     { Text="Pause Other Animations (client‑driven)", Default=Variables.Config.PauseOtherAnimations })
-group:AddToggle("OptFreeze",         { Text="Freeze World Assemblies (reversible)",   Default=Variables.Config.FreezeWorldAssemblies })
-group:AddToggle("OptNoConstraints",  { Text="Disable Constraints (reversible)",       Default=Variables.Config.DisableConstraints })
+optimizationgroup:AddToggle("OptPauseChar",      { Text="Pause Character Animations", Default=Variables.Config.PauseCharacterAnimations })
+optimizationgroup:AddToggle("OptPauseOther",     { Text="Pause Other Animations (client‑driven)", Default=Variables.Config.PauseOtherAnimations })
+optimizationgroup:AddToggle("OptFreeze",         { Text="Freeze World Assemblies (reversible)",   Default=Variables.Config.FreezeWorldAssemblies })
+optimizationgroup:AddToggle("OptNoConstraints",  { Text="Disable Constraints (reversible)",       Default=Variables.Config.DisableConstraints })
 
-group:AddDivider()
-group:AddLabel("Physics / Network")
+optimizationgroup:AddDivider()
+optimizationgroup:AddLabel("Physics / Network")
 
-group:AddToggle("OptAnchorChar",     { Text="Anchor Character",                 Default=Variables.Config.AnchorCharacter })
-group:AddToggle("OptSimRadius",      { Text="Reduce Simulation Radius",         Default=Variables.Config.ReduceSimulationRadius })
-group:AddToggle("OptNoNet",          { Text="Remove Local Network Ownership",   Default=Variables.Config.RemoveLocalNetworkOwnership })
+optimizationgroup:AddToggle("OptAnchorChar",     { Text="Anchor Character",                 Default=Variables.Config.AnchorCharacter })
+optimizationgroup:AddToggle("OptSimRadius",      { Text="Reduce Simulation Radius",         Default=Variables.Config.ReduceSimulationRadius })
+optimizationgroup:AddToggle("OptNoNet",          { Text="Remove Local Network Ownership",   Default=Variables.Config.RemoveLocalNetworkOwnership })
 
-group:AddDivider()
-group:AddLabel("Particles / Effects / Materials")
+optimizationgroup:AddDivider()
+optimizationgroup:AddLabel("Particles / Effects / Materials")
 
-group:AddToggle("OptStopParticles",  { Text="Stop Particle Systems (reversible)", Default=Variables.Config.StopParticleSystems })
-group:AddToggle("OptDestroyEmitters",{ Text="Destroy Emitters (irreversible)",    Default=Variables.Config.DestroyEmitters })
-group:AddToggle("OptSmooth",         { Text="Force SmoothPlastic (reversible)",   Default=Variables.Config.SmoothPlasticEverywhere })
-group:AddToggle("OptHideDecals",     { Text="Hide Decals/Textures (reversible)",  Default=Variables.Config.HideDecals })
-group:AddToggle("OptNukeTextures",   { Text="Nuke Textures (irreversible)",       Default=Variables.Config.NukeTextures })
+optimizationgroup:AddToggle("OptStopParticles",  { Text="Stop Particle Systems (reversible)", Default=Variables.Config.StopParticleSystems })
+optimizationgroup:AddToggle("OptDestroyEmitters",{ Text="Destroy Emitters (irreversible)",    Default=Variables.Config.DestroyEmitters })
+optimizationgroup:AddToggle("OptSmooth",         { Text="Force SmoothPlastic (reversible)",   Default=Variables.Config.SmoothPlasticEverywhere })
+optimizationgroup:AddToggle("OptHideDecals",     { Text="Hide Decals/Textures (reversible)",  Default=Variables.Config.HideDecals })
+optimizationgroup:AddToggle("OptNukeTextures",   { Text="Nuke Textures (irreversible)",       Default=Variables.Config.NukeTextures })
 
-group:AddDivider()
-group:AddLabel("Lighting / Quality")
+optimizationgroup:AddDivider()
+optimizationgroup:AddLabel("Lighting / Quality")
 
-group:AddToggle("OptNoGrass",        { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
+optimizationgroup:AddToggle("OptNoGrass",        { Text="Remove Grass Decoration", Default=Variables.Config.RemoveGrassDecoration })
 --[[
     FIX (APPLIED):
     The typo 'AddAddToggle' has been corrected to 'AddToggle'.
 ]]
-group:AddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
-group:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=Variables.Config.GraySky })
+optimizationgroup:AddToggle("OptNoPostFX",       { Text="Disable Post‑FX (Bloom/CC/DoF/SunRays/Blur)", Default=Variables.Config.DisablePostEffects })
+optimizationgroup:AddToggle("OptGraySky",        { Text="Gray Sky",                 Default=Variables.Config.GraySky })
 -- REMOVED: group:AddSlider("OptGraySkyShade",   { Text="Gray Sky Shade", Min=0, Max=255, Default=Variables.Config.GraySkyShade })
-group:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
-group:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
-group:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog })
-group:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox })
-group:AddToggle("OptMinQuality",     { Text="Use Minimum Quality",      Default=Variables.Config.UseMinimumQuality })
-group:AddToggle("OptClearBlurRestore",{ Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
+optimizationgroup:AddToggle("OptFullBright",     { Text="Full Bright",              Default=Variables.Config.FullBright })
+optimizationgroup:AddSlider("OptFullBrightLvl",  { Text="Full Bright Level", Min=0, Max=5, Default=Variables.Config.FullBrightLevel })
+optimizationgroup:AddToggle("OptNoFog",          { Text="Remove Fog",               Default=Variables.Config.RemoveFog })
+optimizationgroup:AddToggle("OptNoSky",          { Text="Remove Skybox",            Default=Variables.Config.RemoveSkybox })
+optimizationgroup:AddToggle("OptMinQuality",     { Text="Use Minimum Quality",      Default=Variables.Config.UseMinimumQuality })
+optimizationgroup:AddToggle("OptClearBlurRestore",{ Text="Force Clear Blur on Restore", Default=Variables.Config.ForceClearBlurOnRestore })
 
-group:AddDivider()
-group:AddLabel("Water Replacement (auto‑mimic)")
+optimizationgroup:AddDivider()
+optimizationgroup:AddLabel("Water Replacement (auto‑mimic)")
 
-group:AddToggle("OptWaterProxy",     { Text="Replace Water", Default=Variables.Config.ReplaceWaterWithBlock })
-group:AddSlider("OptWaterTrans", {
+optimizationgroup:AddToggle("OptWaterProxy",     { Text="Replace Water", Default=Variables.Config.ReplaceWaterWithBlock })
+optimizationgroup:AddSlider("OptWaterTrans", {
     Text    = "Water Transparency",
     Min     = 0,
     Max     = 100,
