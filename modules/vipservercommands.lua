@@ -47,8 +47,8 @@ do
         end
 
         -- UI
-        local groupbox = UI.Tabs.Misc:AddLeftGroupbox("VIP Commands", "layout-dashboard")
-        groupbox:AddButton({
+        local vipservercommandsgroupbox = UI.Tabs.Misc:AddLeftGroupbox("VIP Commands", "layout-dashboard")
+        vipservercommandsgroupbox:AddButton({
             Text = "Next Mode",
             Func = function() ModuleApi.NextMode() end,
             DoubleClick = false,
@@ -56,7 +56,7 @@ do
             DisabledTooltip = "Feature Disabled",
             Disabled = false,
         })
-        groupbox:AddButton({
+        vipservercommandsgroupbox:AddButton({
             Text = "Freecam",
             Func = function() ModuleApi.Freecam() end,
             DoubleClick = false,
@@ -64,7 +64,7 @@ do
             DisabledTooltip = "Feature Disabled",
             Disabled = false,
         })
-        groupbox:AddButton({
+        vipservercommandsgroupbox:AddButton({
             Text = "Stop Freecam",
             Func = function() ModuleApi.StopFreecam() end,
             DoubleClick = false,
