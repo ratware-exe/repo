@@ -23,7 +23,7 @@ do
         "modules/pvpmode.lua",
         "modules/blockpopup.lua",
         "modules/transfermoney.lua",
-        --"modules/crashserver.lua",
+        "modules/crashserver.lua",
         "modules/debugtools.lua",
         "modules/playeresp.lua",
         "modules/vipservercommands.lua",
