@@ -1,4 +1,4 @@
--- modules/wfyb/propexp.lua
+-- modules/propexp.lua
 do
   return function(UI)
     local Services = loadstring(game:HttpGet(_G.RepoBase.."dependency/Services.lua"), "@Services.lua")()
@@ -25,7 +25,14 @@ do
       OwnBoatModel    = nil,
     }
 
-    -- Utils
+    -- === helpers ===
+    local function GetOrCreateGroup(tab, side, title)
+      local reg = getgenv().UIShared
+      local existing = reg and reg.Find and reg:Find("groupbox", title)
+      if existing then return existing end
+      return (side == "right") and tab:AddRightGroupbox(title) or tab:AddLeftGroupbox(title)
+    end
+
     local function SafeCall(target, methodName, ...)
       local fn = target and target[methodName]
       if type(fn) ~= "function" then return nil end
@@ -77,7 +84,6 @@ do
 
     local function OwnerUserId(boatModel)
       if not (boatModel and boatModel:IsA("Model")) then return nil end
-
       local attrs = boatModel:GetAttributes()
       for k, v in pairs(attrs) do
         local l = string.lower(k)
@@ -85,7 +91,6 @@ do
           local n = tonumber(v) ; if n then return n end
         end
       end
-
       local dataFolder = boatModel:FindFirstChild("BoatData")
       if dataFolder then
         for _, c in ipairs(dataFolder:GetChildren()) do
@@ -102,7 +107,6 @@ do
           end
         end
       end
-
       for _, d in ipairs(boatModel:GetDescendants()) do
         if d:IsA("IntValue") and (d.Name == "Owner" or d.Name == "OwnerUserId") then
           return d.Value
@@ -271,12 +275,10 @@ do
       if Vars.Enabled then return end
       Vars.Enabled = true
 
-      -- Prepare deps
       EnsureNevermore()
       if not Vars.PinkClass then ResolvePinkClass() end
       if not Vars.OwnBoatModel then Vars.OwnBoatModel = FindOwnBoat() end
 
-      -- Worker
       local th = task.spawn(function()
         while Vars.Enabled do
           if not Vars.PinkClass then
@@ -304,18 +306,19 @@ do
       Vars.Maids.Main:DoCleaning()
     end
 
-    -- UI
-    local group = UI.Tabs.EXP:AddLeftGroupbox("Prop EXP")
-    group:AddToggle("propexp_enabled", {
-      Text = "Enable Prop EXP",
+    -- === UI (reuse original EXP groupbox) ===
+    local group = GetOrCreateGroup(UI.Tabs.EXP, "left", "EXP Farm")
+
+    group:AddToggle("AutoPropEXPToggle", {
+      Text = "Prop EXP",
       Default = false,
       Callback = function(on) if on then Start() else Stop() end end,
     })
 
+    -- (extra control; not in original UI)
     group:AddSlider("propexp_interval", {
-      Text = "Place/Sell Interval",
-      Default = Vars.IntervalSeconds,
-      Min = 0.2, Max = 5, Rounding = 2, Suffix = "s",
+      Text = "Prop EXP: Interval",
+      Default = Vars.IntervalSeconds, Min = 0.2, Max = 5, Rounding = 2, Suffix = "s",
       Callback = function(v) Vars.IntervalSeconds = tonumber(v) or Vars.IntervalSeconds end
     })
 
