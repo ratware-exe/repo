@@ -71,7 +71,7 @@ do
         -- UI
         local cameramodgroupbox = UI.Tabs.Misc:AddLeftGroupbox("Inf Zoom", "mouse-pointer-2")
         cameramodgroupbox:AddToggle("InfZoomToggle2", {
-            Text = "Infinite Zoom",
+            Text = "Infinite Zoom2",
             Tooltip = "Allows you to zoom out infinitely.",
             Default = false,
         })
