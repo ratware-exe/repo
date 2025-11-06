@@ -13,7 +13,7 @@ do
 
     local featurePaths = {
         -- If you split Shield out earlier, put it first:
-        "modules/uiregistry.lua",
+        "dependency/UIRegistry.lua",
         "modules/shield.lua",
         "modules/playeresp.lua",
         "modules/vipservercommands.lua",
