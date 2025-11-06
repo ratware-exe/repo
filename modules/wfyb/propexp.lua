@@ -1,4 +1,4 @@
--- modules/prop_exp.lua
+-- modules/wfyb/propexp.lua
 do
   return function(UI)
     local Services = loadstring(game:HttpGet(_G.RepoBase.."dependency/Services.lua"), "@Services.lua")()
