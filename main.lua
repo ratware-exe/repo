@@ -23,12 +23,12 @@ do
         "modules/wfyb/blockpopup.lua",
         "modules/wfyb/transfermoney.lua",
         "modules/wfyb/crashserver.lua",
+        "modules/wfyb/vipservercommands.lua",
         "modules/universal/playeresp.lua",
-        "modules/vipservercommands.lua",
-        "modules/infinitezoom.lua",
-        "modules/antiafk.lua",
-        "modules/optimization.lua",
-        "modules/clientnamespoofer.lua",
+        "modules/universal/infinitezoom.lua",
+        "modules//universalantiafk.lua",
+        "modules/universal/optimization.lua",
+        "modules/universal/clientnamespoofer.lua",
     }
 
     for i = 1, #featurePaths do
