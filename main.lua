@@ -17,12 +17,18 @@ do
         "modules/shield.lua",
         "modules/wfyb/propexp.lua",
         "modules/wfyb/autoflame.lua",
-        "modules/playeresp.lua",
+        "modules/wfyb/repairall.lua",
+        "modules/wfyb/repairself.lua",
+        "modules/wfyb/repairteam.lua",
+        "modules/wfyb/blockpopup.lua",
+        "modules/wfyb/transfermoney.lua",
+        "modules/wfyb/crashserver.lua",
+        "modules/universal/playeresp.lua",
         "modules/vipservercommands.lua",
         "modules/infinitezoom.lua",
         "modules/antiafk.lua",
         "modules/optimization.lua",
-        "modules/universal/clientnamespoofer.lua",
+        "modules/clientnamespoofer.lua",
     }
 
     for i = 1, #featurePaths do
