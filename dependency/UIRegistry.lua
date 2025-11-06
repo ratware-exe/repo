@@ -10,7 +10,6 @@ do
     local G = (getgenv and getgenv()) or _G
 
     -- Expose Obsidian registries for this run (session-local convenience)
-    -- Obsidian docs: Toggles/Options are the canonical registries. :contentReference[oaicite:1]{index=1}
     G.Toggles = UI.Toggles
     G.Options = UI.Options
     G.Tabs    = UI.Tabs
@@ -33,8 +32,7 @@ do
       return guid or ("sess_" .. tostring(math.random()) .. "_" .. tostring(os.clock()))
     end
 
-    -- Backward-compat upgrade: if an old single-session G.UIShared exists but no manager session,
-    -- we park it inside Manager.Sessions["legacy"] so older references keep working.
+    -- Backward-compat upgrade for legacy single-session pointers
     if rawget(G, "UIShared") and not Manager.__upgraded then
       local legacy = G.UIShared
       if type(legacy) == "table" and not Manager.Sessions.legacy then
@@ -50,29 +48,36 @@ do
       local s = {
         Id = id,
         Elements = {
-          label       = {}, -- id or "__name__:Text" → Label
-          button      = {}, -- "__name__:Text" → Button (+ sub-buttons)
-          toggle      = {}, -- id → Toggle
-          checkbox    = {}, -- id → Checkbox
-          input       = {}, -- id → Input
-          slider      = {}, -- id → Slider
-          dropdown    = {}, -- id → Dropdown
-          keybind     = {}, -- id → Keybind (off Toggle/Label hosts)
-          colorpicker = {}, -- id → ColorPicker (off Toggle/Label hosts)
-          divider     = {}, -- guid → Divider
-          viewport    = {}, -- id → Viewport
-          image       = {}, -- id → Image
-          video       = {}, -- id → Video
-          uipass      = {}, -- id → UIPassthrough
-          groupbox    = {}, -- "__name__:Title" → Groupbox
+          label       = {},
+          button      = {},
+          toggle      = {},
+          checkbox    = {},
+          input       = {},
+          slider      = {},
+          dropdown    = {},
+          keybind     = {},
+          colorpicker = {},
+          divider     = {},
+          viewport    = {},
+          image       = {},
+          video       = {},
+          uipass      = {},
+          groupbox    = {}, -- "__name__:Title" → Groupbox (first seen; kept for Find convenience)
           tabbox      = {}, -- "__name__:Title" → Tabbox
           tab         = {}, -- "__name__:Name"  → Tab
         },
-        ButtonSignals = {}, -- "__name__:Text" → Signal aggregator
+        ButtonSignals = {},
+        -- Additional maps for correct dedupe scope:
+        _perTab = {
+          groupboxes = setmetatable({}, { __mode = "k" }), -- tab → { [title]=groupbox }
+          tabboxes   = setmetatable({}, { __mode = "k" }), -- tab → { [title]=tabbox }
+        },
+        _tabboxTabs = setmetatable({}, { __mode = "k" }),    -- tabbox → { [title]=groupbox }
         _patched = {
-          tabs = setmetatable({}, { __mode = "k" }),
+          tabs       = setmetatable({}, { __mode = "k" }),
+          tabboxes   = setmetatable({}, { __mode = "k" }),
           groupboxes = setmetatable({}, { __mode = "k" }),
-          hosts = setmetatable({}, { __mode = "k" }), -- per-host method sentinels
+          hosts      = setmetatable({}, { __mode = "k" }), -- per-host method sentinels
         },
         Find = function(self, kind, key)
           kind = string.lower(kind)
@@ -86,7 +91,7 @@ do
     local Shared = new_session(SessionId)
     Manager.Sessions[SessionId] = Shared
     Manager.Active = SessionId
-    G.UIShared = Shared            -- <-- Active session pointer for this run
+    G.UIShared = Shared
     G.UISharedSessionId = SessionId
 
     ---------------------------------------------------------------------------
@@ -114,7 +119,7 @@ do
       end)
     end
 
-    local function attach_OnChanged(ref, fn) -- Toggle/Checkbox/Input/Slider/Dropdown/ColorPicker
+    local function attach_OnChanged(ref, fn)
       if type(fn) ~= "function" or type(ref) ~= "table" then return end
       if type(ref.OnChanged) == "function" then
         local ok, conn = pcall(function() return ref:OnChanged(fn) end)
@@ -131,9 +136,8 @@ do
     end
 
     ---------------------------------------------------------------------------
-    -- Host patchers (Label/Toggle hosts for Keybinds & ColorPickers)
+    -- Host patchers (KeyPicker / ColorPicker / Button)
     ---------------------------------------------------------------------------
-    -- Keybinds (host:AddKeyPicker) — docs: adders & handlers (OnClick/OnChanged). :contentReference[oaicite:2]{index=2}
     local function patch_keypicker_host(host)
       if type(host) ~= "table" or type(host.AddKeyPicker) ~= "function" or was_host_method_patched(host, "AddKeyPicker") then
         return
@@ -165,7 +169,6 @@ do
       M:GiveTask(function() host.AddKeyPicker = orig end)
     end
 
-    -- ColorPickers (host:AddColorPicker) — docs: adders + OnChanged. :contentReference[oaicite:3]{index=3}
     local function patch_colorpicker_host(host)
       if type(host) ~= "table" or type(host.AddColorPicker) ~= "function" or was_host_method_patched(host, "AddColorPicker") then
         return
@@ -185,7 +188,6 @@ do
       M:GiveTask(function() host.AddColorPicker = orig end)
     end
 
-    -- Sub-buttons (Button:AddButton) — docs: nested buttons. :contentReference[oaicite:4]{index=4}
     local function patch_button_host(host)
       if type(host) ~= "table" or type(host.AddButton) ~= "function" or was_host_method_patched(host, "AddButton") then
         return
@@ -219,17 +221,21 @@ do
           local ok, conn = pcall(function() return sig:Connect(func) end)
           if ok and conn then M:GiveTask(conn) end
         end
-        local function aggregator() local ok, err = pcall(function() sig:Fire() end); if not ok then warn(err) end end
+        local function aggregator()
+          local ok, err = pcall(function() sig:Fire() end)
+          if not ok then warn(err) end
+        end
         local el
         if cfg then cfg.Func = aggregator; el = orig(self, cfg) else el = orig(self, text, aggregator) end
         if key then remember("button", key, el) end
+        patch_button_host(el) -- nested buttons
         return el
       end
       M:GiveTask(function() host.AddButton = orig end)
     end
 
     ---------------------------------------------------------------------------
-    -- Groupbox patcher: wrap ALL adders per docs
+    -- Groupbox patcher: wrap ALL adders per docs (and index by title)
     ---------------------------------------------------------------------------
     local function already_patched_groupbox(box)
       if Shared._patched.groupboxes[box] then return true end
@@ -237,8 +243,6 @@ do
       return false
     end
 
-    -- Elements pages: Labels, Buttons, Toggles, Checkboxes, Inputs, Sliders, Dropdowns,
-    -- Keybinds, Color Pickers, Dividers, Viewports, Images, Videos, UI Passthrough. :contentReference[oaicite:5]{index=5}
     local function patch_groupbox(box)
       if type(box) ~= "table" or already_patched_groupbox(box) then return end
 
@@ -260,8 +264,8 @@ do
           end
           local el = orig(self, a1, a2)
           if key then remember("label", key, el) end
-          patch_keypicker_host(el)     -- labels can host keybinds
-          patch_colorpicker_host(el)   -- labels can host color pickers
+          patch_keypicker_host(el)
+          patch_colorpicker_host(el)
           return el
         end
         M:GiveTask(function() box.AddLabel = orig end)
@@ -298,7 +302,7 @@ do
           local el
           if cfg then cfg.Func = aggregator; el = orig(self, cfg) else el = orig(self, text, aggregator) end
           if key then remember("button", key, el) end
-          patch_button_host(el) -- allow sub-buttons to dedupe/aggregate
+          patch_button_host(el)
           return el
         end
         M:GiveTask(function() box.AddButton = orig end)
@@ -393,7 +397,7 @@ do
         M:GiveTask(function() box.AddDropdown = orig end)
       end
 
-      -- Divider (visual; no args)
+      -- Divider
       if type(box.AddDivider) == "function" then
         local orig = box.AddDivider
         box.AddDivider = function(self, ...)
@@ -469,14 +473,60 @@ do
         M:GiveTask(function() box.AddUIPassthrough = orig end)
       end
 
-      -- Index groupbox by title for convenience
+      -- Index by box title for convenience
       if type(box.Title) == "string" and box.Title ~= "" then
         remember("groupbox", "__name__:" .. box.Title, box)
       end
     end
 
     ---------------------------------------------------------------------------
-    -- Tabs / Tabboxes patchers
+    -- Tabbox patcher (AddTab dedupe → Groupbox)
+    ---------------------------------------------------------------------------
+    local function already_patched_tabbox(tb)
+      if Shared._patched.tabboxes[tb] then return true end
+      Shared._patched.tabboxes[tb] = true
+      return false
+    end
+
+    local function patch_tabbox(tb)
+      if type(tb) ~= "table" or already_patched_tabbox(tb) then return end
+
+      if type(tb.AddTab) == "function" then
+        local orig = tb.AddTab
+        tb.AddTab = function(self, title)
+          local map = Shared._tabboxTabs[self]
+          if not map then map = {}; Shared._tabboxTabs[self] = map end
+
+          if type(title) == "string" and title ~= "" then
+            local existing = map[title]
+            if existing then
+              patch_groupbox(existing) -- ensure patched
+              return existing
+            end
+          end
+
+          local gb = orig(self, title)
+          patch_groupbox(gb)
+
+          if type(title) == "string" and title ~= "" then
+            map[title] = gb
+            if not Shared.Elements.groupbox["__name__:" .. title] then
+              remember("groupbox", "__name__:" .. title, gb)
+            end
+          end
+          return gb
+        end
+        M:GiveTask(function() tb.AddTab = orig end)
+      end
+
+      -- Index tabbox by title for convenience
+      if type(tb.Title) == "string" and tb.Title ~= "" then
+        remember("tabbox", "__name__:" .. tb.Title, tb)
+      end
+    end
+
+    ---------------------------------------------------------------------------
+    -- Tabs patchers (Groupbox & Tabbox creation dedupe)
     ---------------------------------------------------------------------------
     local function already_patched_tab(tab)
       if Shared._patched.tabs[tab] then return true end
@@ -484,79 +534,115 @@ do
       return false
     end
 
-    -- Tabs — patch methods that create groupboxes/tabboxes. :contentReference[oaicite:6]{index=6}
+    local function per_tab_maps(tab)
+      local gmap = Shared._perTab.groupboxes[tab]
+      if not gmap then gmap = {}; Shared._perTab.groupboxes[tab] = gmap end
+      local tbmap = Shared._perTab.tabboxes[tab]
+      if not tbmap then tbmap = {}; Shared._perTab.tabboxes[tab] = tbmap end
+      return gmap, tbmap
+    end
+
     local function patch_tab(tab, name)
       if type(tab) ~= "table" or already_patched_tab(tab) then return end
+      local gbmap, tbmap = per_tab_maps(tab)
 
+      -- AddLeftGroupbox
       if type(tab.AddLeftGroupbox) == "function" then
         local orig = tab.AddLeftGroupbox
-        tab.AddLeftGroupbox = function(self, ...)
-          local gb = orig(self, ...)
+        tab.AddLeftGroupbox = function(self, title)
+          if type(title) == "string" and title ~= "" then
+            local existing = gbmap[title]
+            if existing then
+              patch_groupbox(existing)
+              return existing
+            end
+          end
+          local gb = orig(self, title)
           patch_groupbox(gb)
+          if type(title) == "string" and title ~= "" then
+            gbmap[title] = gb
+            if not Shared.Elements.groupbox["__name__:" .. title] then
+              remember("groupbox", "__name__:" .. title, gb)
+            end
+          end
           return gb
         end
         M:GiveTask(function() tab.AddLeftGroupbox = orig end)
       end
 
+      -- AddRightGroupbox
       if type(tab.AddRightGroupbox) == "function" then
         local orig = tab.AddRightGroupbox
-        tab.AddRightGroupbox = function(self, ...)
-          local gb = orig(self, ...)
+        tab.AddRightGroupbox = function(self, title)
+          if type(title) == "string" and title ~= "" then
+            local existing = gbmap[title]
+            if existing then
+              patch_groupbox(existing)
+              return existing
+            end
+          end
+          local gb = orig(self, title)
           patch_groupbox(gb)
+          if type(title) == "string" and title ~= "" then
+            gbmap[title] = gb
+            if not Shared.Elements.groupbox["__name__:" .. title] then
+              remember("groupbox", "__name__:" .. title, gb)
+            end
+          end
           return gb
         end
         M:GiveTask(function() tab.AddRightGroupbox = orig end)
       end
 
+      -- AddLeftTabbox
       if type(tab.AddLeftTabbox) == "function" then
         local orig = tab.AddLeftTabbox
-        tab.AddLeftTabbox = function(self, ...)
-          local tb = orig(self, ...)
-          -- Patch Tabbox
-          if type(tb) == "table" and type(tb.AddTab) == "function" then
-            local tb_orig = tb.AddTab
-            tb.AddTab = function(self2, title)
-              local gb = tb_orig(self2, title)
-              patch_groupbox(gb)
-              if type(title) == "string" and title ~= "" then
-                remember("groupbox", "__name__:" .. title, gb)
-              end
-              return gb
+        tab.AddLeftTabbox = function(self, title)
+          if type(title) == "string" and title ~= "" then
+            local existing = tbmap[title]
+            if existing then
+              patch_tabbox(existing)
+              return existing
             end
-            M:GiveTask(function() tb.AddTab = tb_orig end)
           end
-          if type(tb.Title) == "string" and tb.Title ~= "" then
-            remember("tabbox", "__name__:" .. tb.Title, tb)
+          local tb = orig(self, title)
+          patch_tabbox(tb)
+          if type(title) == "string" and title ~= "" then
+            tbmap[title] = tb
+            if not Shared.Elements.tabbox["__name__:" .. title] then
+              remember("tabbox", "__name__:" .. title, tb)
+            end
           end
           return tb
         end
         M:GiveTask(function() tab.AddLeftTabbox = orig end)
       end
 
+      -- AddRightTabbox
       if type(tab.AddRightTabbox) == "function" then
         local orig = tab.AddRightTabbox
-        tab.AddRightTabbox = function(self, ...)
-          local tb = orig(self, ...)
-          if type(tb) == "table" and type(tb.AddTab) == "function" then
-            local tb_orig = tb.AddTab
-            tb.AddTab = function(self2, title)
-              local gb = tb_orig(self2, title)
-              patch_groupbox(gb)
-              if type(title) == "string" and title ~= "" then
-                remember("groupbox", "__name__:" .. title, gb)
-              end
-              return gb
+        tab.AddRightTabbox = function(self, title)
+          if type(title) == "string" and title ~= "" then
+            local existing = tbmap[title]
+            if existing then
+              patch_tabbox(existing)
+              return existing
             end
-            M:GiveTask(function() tb.AddTab = tb_orig end)
           end
-          if type(tb.Title) == "string" and tb.Title ~= "" then
-            remember("tabbox", "__name__:" .. tb.Title, tb)
+          local tb = orig(self, title)
+          patch_tabbox(tb)
+          if type(title) == "string" and title ~= "" then
+            tbmap[title] = tb
+            if not Shared.Elements.tabbox["__name__:" .. title] then
+              remember("tabbox", "__name__:" .. title, tb)
+            end
           end
           return tb
         end
         M:GiveTask(function() tab.AddRightTabbox = orig end)
       end
 
+      -- Index tab by name for convenience
       if type(name) == "string" and name ~= "" then
         remember("tab", "__name__:" .. name, tab)
       end
@@ -574,7 +660,6 @@ do
       -- Restore patched methods and disconnect handlers for THIS session
       M:DoCleaning()
 
-      -- Remove this session from the manager and restore the active pointer sensibly
       local mgr = rawget(G, "UISharedManager")
       if mgr and mgr.Sessions then
         mgr.Sessions[SessionId] = nil
