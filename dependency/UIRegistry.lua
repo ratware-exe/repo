@@ -1,4 +1,5 @@
 -- dependency/UIRegistry.lua
+print('new')
 do
   return function(UI)
     -- Shared deps (your system)
