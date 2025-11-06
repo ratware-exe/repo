@@ -8,24 +8,53 @@ do
 
         -- state
         local running = false
-        local saved = nil  -- per-signal bucket of the exact connections we disabled
+        local saved   = nil  -- name -> { [RBXScriptConnection] = true }
 
         -- helpers
+        local function safe_typeof(v)
+            local ok, t = pcall(function() return typeof(v) end)
+            return ok and t or nil
+        end
+
         local function list_connections(signal)
+            if not signal then return {} end
             local ok, conns = pcall(getconnections, signal)
             if not ok or type(conns) ~= "table" then return {} end
             return conns
         end
 
+        local function first_valid_signal(root, candidate_names)
+            for i = 1, #candidate_names do
+                local name = candidate_names[i]
+                local ok, value = pcall(function() return root[name] end)
+                if ok and safe_typeof(value) == "RBXScriptSignal" then
+                    return value, name
+                end
+            end
+            return nil, nil
+        end
+
         local function current_signals()
-            local withstack = services.LogService.MessageOutWithStack or services.LogService.MessageOutWithStackTrace
-            return {
-                { name = "messageout",        sig = services.LogService.MessageOut },
-                { name = "messageoutstack",   sig = withstack },
-                { name = "httpresult",        sig = services.LogService.HttpResultOut },
-                { name = "scriptwarn",        sig = services.ScriptContext.Warning },
-                { name = "scripterror",       sig = services.ScriptContext.Error },
-            }
+            -- probe candidates; keep only what actually exists on this client
+            local message_out          = first_valid_signal(services.LogService, { "MessageOut" })
+            local message_out_with_any = first_valid_signal(services.LogService, {
+                "MessageOutWithStack",        -- some environments
+                "MessageOutWithStackTrace",   -- others
+                -- (leave room for additional variants as needed)
+            })
+            local http_result          = first_valid_signal(services.LogService, { "HttpResultOut" })
+            local script_warn          = first_valid_signal(services.ScriptContext, { "Warning" })
+            local script_error         = first_valid_signal(services.ScriptContext, { "Error" })
+
+            local out = {}
+
+            if message_out         then table.insert(out, { name = "messageout",      sig = message_out }) end
+            if message_out_with_any then table.insert(out, { name = "messageoutstack", sig = message_out_with_any }) end
+            if http_result         then table.insert(out, { name = "httpresult",      sig = http_result }) end
+            if script_warn         then table.insert(out, { name = "scriptwarn",      sig = script_warn }) end
+            if script_error        then table.insert(out, { name = "scripterror",     sig = script_error }) end
+
+            return out
         end
 
         local function disable_signal(signal, bucket)
@@ -34,12 +63,10 @@ do
             for i = 1, #conns do
                 local c = conns[i]
                 if c and c.Disable and not bucket[c] then
-                    -- Only Disable; never Disconnect (can’t safely restore Disconnect)
                     local ok = pcall(function() c:Disable() end)
                     if ok then
                         bucket[c] = true
-
-                        -- re-enable this exact connection when we clean
+                        -- schedule exact re-enable for this connection
                         maid:GiveTask(function()
                             if c and c.Enable then pcall(function() c:Enable() end) end
                         end)
@@ -54,8 +81,12 @@ do
                 local bucket = saved[entry.name]
                 if bucket then disable_signal(entry.sig, bucket) end
             end
-            -- optional: clear visual spam too
-            pcall(function() services.LogService:ClearOutput() end)
+            -- optional: clear visual spam too; guard in case method isn’t present
+            pcall(function()
+                if services.LogService.ClearOutput then
+                    services.LogService:ClearOutput()
+                end
+            end)
         end
 
         local function enable_saved()
@@ -72,6 +103,7 @@ do
             if running then return end
             running = true
 
+            -- create one bucket per possible key so Stop() is deterministic
             saved = {
                 messageout      = {},
                 messageoutstack = {},
@@ -85,7 +117,7 @@ do
             local hb = services.RunService.Heartbeat:Connect(sweep_once)
             maid:GiveTask(hb)
 
-            -- safety: ensure re-enable happens even if the module is unloaded abruptly
+            -- ensure re-enable happens even if the module is unloaded abruptly
             maid:GiveTask(function()
                 running = false
                 enable_saved()
@@ -95,9 +127,8 @@ do
         local function stop()
             if not running then return end
             running = false
-
             -- stop background and re-enable exactly what we disabled
-            maid:DoCleaning() -- triggers enable_saved via maid task above
+            maid:DoCleaning() -- triggers enable_saved via the maid task above
             saved = nil
         end
 
