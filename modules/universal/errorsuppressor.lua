@@ -1,100 +1,122 @@
--- modules/universal/errorsuppressor.lua
+-- modules/errorsuppressor.lua
 do
     return function(ui)
-        local rbxservice = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
-        local maid       = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local tasks      = maid.new()
+        -- deps
+        local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+        local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        local maid     = Maid.new()
 
-        local run_flag = false
-        local disabled = {}   -- [RBXScriptConnection] = true
-        local watch_thread = nil
+        -- state
+        local running = false
+        local saved = nil  -- per-signal bucket of the exact connections we disabled
 
-        -- executor-only helper; noop on unsupported environments
+        -- helpers
         local function list_connections(signal)
             local ok, conns = pcall(getconnections, signal)
-            if not ok or not conns then return {} end
+            if not ok or type(conns) ~= "table" then return {} end
             return conns
         end
 
-        local function disable_signal(signal)
-            for _, c in ipairs(list_connections(signal)) do
-                pcall(function()
-                    if c and c.Disable then c:Disable() end
-                    disabled[c] = true
-                end)
+        local function current_signals()
+            local withstack = services.LogService.MessageOutWithStack or services.LogService.MessageOutWithStackTrace
+            return {
+                { name = "messageout",        sig = services.LogService.MessageOut },
+                { name = "messageoutstack",   sig = withstack },
+                { name = "httpresult",        sig = services.LogService.HttpResultOut },
+                { name = "scriptwarn",        sig = services.ScriptContext.Warning },
+                { name = "scripterror",       sig = services.ScriptContext.Error },
+            }
+        end
+
+        local function disable_signal(signal, bucket)
+            if not signal then return end
+            local conns = list_connections(signal)
+            for i = 1, #conns do
+                local c = conns[i]
+                if c and c.Disable and not bucket[c] then
+                    -- Only Disable; never Disconnect (can’t safely restore Disconnect)
+                    local ok = pcall(function() c:Disable() end)
+                    if ok then
+                        bucket[c] = true
+
+                        -- re-enable this exact connection when we clean
+                        maid:GiveTask(function()
+                            if c and c.Enable then pcall(function() c:Enable() end) end
+                        end)
+                    end
+                end
             end
         end
 
-        local function enable_all_saved()
-            for c in pairs(disabled) do
-                pcall(function()
-                    if c and c.Enable then c:Enable() end
-                end)
-                disabled[c] = nil
+        local function sweep_once()
+            if not saved then return end
+            for _, entry in ipairs(current_signals()) do
+                local bucket = saved[entry.name]
+                if bucket then disable_signal(entry.sig, bucket) end
             end
+            -- optional: clear visual spam too
+            pcall(function() services.LogService:ClearOutput() end)
         end
 
-        local function refresh_once()
-            -- LogService outputs
-            pcall(function() disable_signal(rbxservice.LogService.MessageOut) end)
-            pcall(function()
-                local with_stack = rbxservice.LogService.MessageOutWithStack or rbxservice.LogService.MessageOutWithStackTrace
-                if with_stack then disable_signal(with_stack) end
-            end)
-            pcall(function() disable_signal(rbxservice.LogService.HttpResultOut) end)
-
-            -- ScriptContext warnings/errors
-            pcall(function() disable_signal(rbxservice.ScriptContext.Warning) end)
-            pcall(function() disable_signal(rbxservice.ScriptContext.Error) end)
+        local function enable_saved()
+            if not saved then return end
+            for _, bucket in pairs(saved) do
+                for c in pairs(bucket) do
+                    pcall(function() if c and c.Enable then c:Enable() end end)
+                    bucket[c] = nil
+                end
+            end
         end
 
         local function start()
-            if run_flag then return end
-            run_flag = true
+            if running then return end
+            running = true
 
-            -- initial sweep
-            refresh_once()
+            saved = {
+                messageout      = {},
+                messageoutstack = {},
+                httpresult      = {},
+                scriptwarn      = {},
+                scripterror     = {},
+            }
 
-            -- keep things quiet as new connections appear
-            watch_thread = task.spawn(function()
-                while run_flag do
-                    refresh_once()
-                    task.wait(0.5)
-                end
-            end)
-            tasks:GiveTask(function()
-                run_flag = false
-            end)
-            tasks:GiveTask(function()
-                if watch_thread then pcall(task.cancel, watch_thread) end
-                watch_thread = nil
+            -- first pass + background catch for newly-added connections
+            sweep_once()
+            local hb = services.RunService.Heartbeat:Connect(sweep_once)
+            maid:GiveTask(hb)
+
+            -- safety: ensure re-enable happens even if the module is unloaded abruptly
+            maid:GiveTask(function()
+                running = false
+                enable_saved()
             end)
         end
 
         local function stop()
-            run_flag = false
-            if watch_thread then pcall(task.cancel, watch_thread) end
-            watch_thread = nil
-            enable_all_saved()
-            tasks:DoCleaning()
+            if not running then return end
+            running = false
+
+            -- stop background and re-enable exactly what we disabled
+            maid:DoCleaning() -- triggers enable_saved via maid task above
+            saved = nil
         end
 
-        -- UI on Debug tab (mirrors your layout)
-        local tab = ui.Tabs.Debug or ui.Tabs["Debug"]
-        if not tab then
-            tab = ui.Tabs.Misc or ui.Tabs["Misc"]
+        -- UI wiring (Debug tab; icon = terminal)
+        do
+            local group = ui.Tabs and ui.Tabs.Debug and ui.Tabs.Debug:AddRightGroupbox("Console", "terminal")
+            if group then
+                group:AddToggle("ErrorWarningSuppressorToggle", {
+                    Text = "Suppress console errors & warnings",
+                    Tooltip = "Temporarily disables LogService/ScriptContext handlers (no disconnects).",
+                    Default = false
+                })
+
+                ui.Toggles.ErrorWarningSuppressorToggle:OnChanged(function(enabled)
+                    if enabled then start() else stop() end
+                end)
+            end
         end
 
-        local group = tab:AddRightGroupbox("Console Noise Suppressor", "ban")
-        group:AddToggle("ErrorWarningSuppressorToggle", {
-            Text = "Suppress Errors / Warnings / Http logs",
-            Tooltip = "Disables existing LogService and ScriptContext connections and keeps them disabled while on.",
-            Default = false,
-        })
-        ui.Toggles.ErrorWarningSuppressorToggle:OnChanged(function(enabled)
-            if enabled then start() else stop() end
-        end)
-
-        return { Name = "errorsuppressor", Stop = stop }
+        return { Name = "ErrorSuppressor", Stop = stop }
     end
 end
