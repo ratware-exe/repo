@@ -105,8 +105,8 @@ do
         end
 
         -- Minimal UI: Settings → Shield
-        local groupbox = UI.Tabs.Settings:AddRightGroupbox("Shield", "shield")
-        groupbox:AddToggle("ShieldToggle", {
+        local shieldgroupbox = UI.Tabs.Settings:AddRightGroupbox("Shield", "shield")
+        shieldgroupbox:AddToggle("ShieldToggle", {
             Text = "Block telemetry remotes",
             Tooltip = "Hooks RemoteEvent:FireServer to block names matching GA/Report/Log/Analytics/Telemetry/Error.",
             Default = true,
