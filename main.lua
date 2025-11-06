@@ -26,7 +26,7 @@ do
         "modules/wfyb/vipservercommands.lua",
         "modules/universal/playeresp.lua",
         "modules/universal/infinitezoom.lua",
-        "modules//universalantiafk.lua",
+        "modules/universal/antiafk.lua",
         "modules/universal/optimization.lua",
         "modules/universal/clientnamespoofer.lua",
     }
