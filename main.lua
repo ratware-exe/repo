@@ -14,21 +14,23 @@ do
 local featurePaths = {
     "dependency/UIRegistry.lua",
     "modules/universal/errorsuppressor.lua",
-    -- converted modules from prompt.lua:
+    -- Movement / Bypass / Teleport / Vehicle tools
     "modules/universal/speedhack.lua",
     "modules/universal/flight.lua",
     "modules/universal/noclip.lua",
     "modules/wfyb/infinitestamina.lua",
     "modules/universal/attachtoback.lua",
     "modules/wfyb/teleport.lua",
-    "modules/wfyb/gyroscope.lua",
+    "modules/wfyb/customgyroscope.lua",
+    
+    -- ESP & Visuals
     "modules/wfyb/playeresp.lua",
     "modules/wfyb/proximityarrows.lua",
     "modules/wfyb/boatesp.lua",
     "modules/universal/fullbright.lua",
     "modules/universal/nosky.lua",
     "modules/universal/nofog.lua",
-
+        
     -- your existing WFYB-specific and universal modules:
     "modules/wfyb/shield.lua",
     "modules/wfyb/propexp.lua",
