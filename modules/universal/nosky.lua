@@ -1,66 +1,41 @@
 -- modules/universal/nosky.lua
 do
-    return function(ui)
+    return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        local maid     = Maid.new()
 
-        local maid = Maid.new()
-        local enabled = false
-        local saved = {}
+        local cache = {}
 
-        local function clear_skies()
-            for _, ch in ipairs(services.Lighting:GetChildren()) do
-                if ch:IsA("Sky") then
-                    table.insert(saved, ch:Clone())
-                    ch:Destroy()
+        local function apply()
+            local l = services.Lighting
+            for _, inst in ipairs(l:GetChildren()) do
+                if inst:IsA("Sky") then
+                    cache[inst] = true
+                    pcall(function() inst:Destroy() end)
                 end
             end
         end
 
-        local function enable()
-            clear_skies()
-            maid:GiveTask(services.Lighting.ChildAdded:Connect(function(ch)
-                if enabled and ch:IsA("Sky") then
-                    task.defer(function() if ch and ch.Parent then ch:Destroy() end end)
-                end
-            end))
-        end
-
-        local function disable()
-            for _, s in ipairs(saved) do s:Clone().Parent = services.Lighting end
-            table.clear(saved)
-        end
-
-        local heartbeat_last
-        local function heartbeat()
-            if enabled ~= heartbeat_last then
-                heartbeat_last = enabled
-                if enabled then enable() else disable() end
-            end
-        end
-
-        local hb_conn
-
-        local function start()
-            enabled = true
-            if hb_conn then return end
-            hb_conn = services.RunService.Heartbeat:Connect(heartbeat)
-            maid:GiveTask(hb_conn)
-        end
-
-        local function stop()
-            enabled = false
-            if hb_conn then pcall(function() hb_conn:Disconnect() end); hb_conn = nil end
-            disable()
+        local function Stop()
             maid:DoCleaning()
         end
 
-        -- UI (Visual)
-        local tab = ui.Tabs.Visual or ui.Tabs.Main
-        local group = tab:AddRightGroupbox("World", "sun")
-        group:AddToggle("RemoveSkyToggle", { Text = "No Sky", Default = false })
-        ui.Toggles.RemoveSkyToggle:OnChanged(function(v) if v then start() else stop() end end)
+        -- UI
+        do
+            local tab = UI.Tabs.Visual or UI.Tabs.Misc
+            local group = tab:AddRightGroupbox("Lighting Mods", "sun")
+            group:AddToggle("NoSkyToggle", { Text = "No Sky", Default = false })
+        end
 
-        return { Name = "NoSky", Stop = stop }
+        if UI.Toggles and UI.Toggles.NoSkyToggle then
+            UI.Toggles.NoSkyToggle:OnChanged(function(v)
+                if v then apply() else -- cannot restore destroyed instances reliably; original script removed them as well
+                    -- noop
+                end
+            end)
+        end
+
+        return { Name = "NoSky", Stop = Stop }
     end
 end
