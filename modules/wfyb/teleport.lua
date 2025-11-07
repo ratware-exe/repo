@@ -1,4 +1,4 @@
--- modules/universal/teleport.lua
+-- modules/wfyb/teleport.lua
 do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
