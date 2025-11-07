@@ -1,65 +1,68 @@
 -- modules/universal/infinitestamina.lua
--- Infinite stamina for titles that compute stamina by water level constants (WFYB-style).
 do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
 
-        local state = {
-            enabled = false,
-            saved_value = nil,
-        }
+        local maid = Maid.new()
+        local running = false
 
-        local function try_patch(value)
-            local ok, pool = pcall(getgc, false)
-            if not ok or type(pool) ~= "table" then return end
-            for _, t in ipairs(pool) do
-                if type(t) == "table" and rawget(t, "WATER_LEVEL_TORSO") ~= nil then
-                    if state.saved_value == nil then state.saved_value = t.WATER_LEVEL_TORSO end
-                    pcall(function() t.WATER_LEVEL_TORSO = value end)
-                    break
+        local candidate_names = { "Stamina", "stamina", "Oxygen", "oxygen", "Breath", "breath", "Energy", "energy" }
+
+        local function set_value_if_number(obj, n)
+            if typeof(obj) == "Instance" then
+                if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+                    pcall(function() obj.Value = n end)
+                end
+            end
+        end
+
+        local function pump()
+            local player = services.Players.LocalPlayer
+            local character = player and player.Character
+            local container = character or player
+            if not container then return end
+
+            for _, name in ipairs(candidate_names) do
+                local inst = character and character:FindFirstChild(name, true)
+                if inst then set_value_if_number(inst, 999999) end
+            end
+
+            -- Attributes variant
+            if character then
+                for _, name in ipairs(candidate_names) do
+                    if character:GetAttribute(name) ~= nil then
+                        pcall(function() character:SetAttribute(name, 999999) end)
+                    end
                 end
             end
         end
 
         local function start()
-            if state.enabled then return end
-            state.enabled = true
-            -- Push the threshold way down to prevent stamina drain checks from triggering
-            try_patch(-math.huge)
-            maid:GiveTask(function()
-                state.enabled = false
-                -- restore on cleanup
-                if state.saved_value ~= nil then
-                    local ok, pool = pcall(getgc, false)
-                    if ok and type(pool) == "table" then
-                        for _, t in ipairs(pool) do
-                            if type(t) == "table" and rawget(t, "WATER_LEVEL_TORSO") ~= nil then
-                                pcall(function() t.WATER_LEVEL_TORSO = state.saved_value end)
-                                break
-                            end
-                        end
-                    end
-                end
+            if running then return end
+            running = true
+            local hb = services.RunService.Heartbeat:Connect(function()
+                if running then pump() end
             end)
+            maid:GiveTask(hb)
+            maid:GiveTask(function() running = false end)
         end
 
         local function stop()
-            if not state.enabled then return end
-            state.enabled = false
+            running = false
             maid:DoCleaning()
         end
 
-        local group = ui.Tabs.Main:AddRightGroupbox("Bypass", "droplet")
+        -- UI (Bypass)
+        local bypass_tab = ui.Tabs.Main or ui.Tabs["Main"]
+        local group = bypass_tab:AddLeftGroupbox("Bypass", "shield-off")
         group:AddToggle("InfiniteStaminaToggle", {
             Text = "Infinite Stamina",
-            Tooltip = "Neutralizes stamina/water checks (restored on stop).",
+            Tooltip = "Stay underwater indefinitely.",
             Default = false,
         })
-
-        ui.Toggles.InfiniteStaminaToggle:OnChanged(function(v)
-            if v then start() else stop() end
+        ui.Toggles.InfiniteStaminaToggle:OnChanged(function(enabled)
+            if enabled then start() else stop() end
         end)
 
         return { Name = "InfiniteStamina", Stop = stop }
