@@ -1,94 +1,92 @@
--- modules/wfyb/customgyroscope.lua
+-- modules/universal/gyroscope.lua
 do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
 
-        local state = {
-            enabled = false,
-            x = 0, y = 0, z = 0,
-            align = nil,
-            base = nil,
-        }
+        local maid = Maid.new()
+        local enabled = false
+        local xdeg, ydeg, zdeg = 0, 0, 0
+        local bodygyro, lastpart
 
-        local function get_base()
-            local p = services.Players.LocalPlayer
-            local c = p and p.Character
-            if not c then return nil end
-            local hum = c:FindFirstChildOfClass("Humanoid")
-            if hum and hum.SeatPart then return hum.SeatPart end
-            return c:FindFirstChild("HumanoidRootPart")
+        local function current_base()
+            local player = services.Players.LocalPlayer
+            local character = player and player.Character
+            if not character then return nil end
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Sit and humanoid.SeatPart then
+                return humanoid.SeatPart
+            end
+            return character:FindFirstChild("HumanoidRootPart")
         end
 
-        local function apply_angles()
-            local base = state.base or get_base()
-            if not (base and state.align) then return end
-            local cf = CFrame.Angles(math.rad(state.x), math.rad(state.y), math.rad(state.z))
-            state.align.CFrame = base.CFrame.Rotation * cf
+        local function ensure_gyro()
+            local base = current_base()
+            if not base then return end
+            if base ~= lastpart then
+                if bodygyro then bodygyro:Destroy() bodygyro = nil end
+                lastpart = base
+            end
+            if not bodygyro then
+                bodygyro = Instance.new("BodyGyro")
+                bodygyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+                bodygyro.P = 25_000
+                bodygyro.Parent = base
+                maid:GiveTask(bodygyro)
+            end
+        end
+
+        local function update_orientation()
+            if not enabled then return end
+            ensure_gyro()
+            if bodygyro and lastpart then
+                local cf = CFrame.new(lastpart.Position) * CFrame.Angles(math.rad(xdeg), math.rad(ydeg), math.rad(zdeg))
+                bodygyro.CFrame = cf
+            end
         end
 
         local function start()
-            if state.enabled then return end
-            state.enabled = true
-            state.base = get_base()
-            if not state.base then state.enabled = false; return end
-
-            local a0 = Instance.new("Attachment"); a0.Name="GyroAttachment"; a0.Parent = state.base
-            local al = Instance.new("AlignOrientation")
-            al.MaxAngularVelocity = math.huge
-            al.Responsiveness = 200
-            al.Mode = Enum.OrientationAlignmentMode.OneAttachment
-            al.Attachment0 = a0
-            al.Parent = state.base
-            state.align = al
-
-            apply_angles()
-            local hb = services.RunService.Heartbeat:Connect(function()
-                if not state.enabled then return end
-                apply_angles()
-            end)
-            maid:GiveTask(hb)
-            maid:GiveTask(function()
-                state.enabled = false
-                if state.align then pcall(function() state.align:Destroy() end) end
-                state.align = nil
-            end)
+            if enabled then return end
+            enabled = true
+            ensure_gyro()
+            local rs = services.RunService.RenderStepped:Connect(update_orientation)
+            maid:GiveTask(rs)
+            maid:GiveTask(function() enabled = false end)
         end
 
         local function stop()
-            if not state.enabled then return end
-            state.enabled = false
+            enabled = false
             maid:DoCleaning()
+            if bodygyro then bodygyro:Destroy() bodygyro = nil end
         end
 
-        -- UI: Gyro controls (same ids as prompt.lua)
-        local group = ui.Tabs.Main:AddRightGroupbox("Gyroscope", "rotate-3d")
+        -- UI (Modifiers)
+        local tab = ui.Tabs.Main or ui.Tabs.Misc
+        local group = tab:AddRightGroupbox("Modifiers", "package-plus")
+
         group:AddToggle("GyroToggle", {
-            Text = "Enable Gyro",
-            Tooltip = "Force orientation using X/Y/Z angles.",
+            Text = "Custom Gyro",
+            Tooltip = "Turns the custom gyroscope [ON]/[OFF].",
             Default = false,
-        }):AddKeyPicker("GyroKeybind", { Text="Gyro Toggle", Default="J", Mode="Toggle", NoUI=true })
+        })
+        group:AddSlider("XAxisAngle", { Text = "X Angle", Default = 0, Min = -180, Max = 180, Rounding = 1, Compact = true })
+        group:AddSlider("YAxisAngle", { Text = "Y Angle", Default = 0, Min = -180, Max = 180, Rounding = 1, Compact = true })
+        group:AddSlider("ZAxisAngle", { Text = "Z Angle", Default = 0, Min = -180, Max = 180, Rounding = 1, Compact = true })
 
-        group:AddSlider("XAxisAngle", { Text="X Axis", Default=0, Min=-180, Max=180, Rounding=0 })
-        group:AddSlider("YAxisAngle", { Text="Y Axis", Default=0, Min=-180, Max=180, Rounding=0 })
-        group:AddSlider("ZAxisAngle", { Text="Z Axis", Default=0, Min=-180, Max=180, Rounding=0 })
-
-        ui.Toggles.GyroToggle:OnChanged(function(v)
-            if v then start() else stop() end
-        end)
-
-        for id, key in pairs({ XAxisAngle="x", YAxisAngle="y", ZAxisAngle="z" }) do
-            local opt = ui.Options[id]
-            if opt and opt.OnChanged then
-                opt:OnChanged(function(v)
-                    local n = tonumber(v); if n then state[key] = n; apply_angles() end
-                end)
-            end
-            if opt and opt.Value ~= nil then
-                local n = tonumber(opt.Value); if n then state[key] = n end
-            end
+        if ui.Options.XAxisAngle then
+            ui.Options.XAxisAngle:OnChanged(function(v) xdeg = tonumber(v) or xdeg; update_orientation() end)
+            xdeg = tonumber(ui.Options.XAxisAngle.Value) or 0
         end
+        if ui.Options.YAxisAngle then
+            ui.Options.YAxisAngle:OnChanged(function(v) ydeg = tonumber(v) or ydeg; update_orientation() end)
+            ydeg = tonumber(ui.Options.YAxisAngle.Value) or 0
+        end
+        if ui.Options.ZAxisAngle then
+            ui.Options.ZAxisAngle:OnChanged(function(v) zdeg = tonumber(v) or zdeg; update_orientation() end)
+            zdeg = tonumber(ui.Options.ZAxisAngle.Value) or 0
+        end
+
+        ui.Toggles.GyroToggle:OnChanged(function(v) if v then start() else stop() end end)
 
         return { Name = "Gyroscope", Stop = stop }
     end
