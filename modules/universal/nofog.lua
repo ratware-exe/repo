@@ -1,56 +1,65 @@
 -- modules/universal/nofog.lua
 do
-    return function(ui)
+    return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        local maid     = Maid.new()
 
-        local maid = Maid.new()
-        local backup = nil
-
-        local function enable()
-            if not backup then
-                local a = services.Lighting:FindFirstChildOfClass("Atmosphere")
-                backup = {
-                    fogend = services.Lighting.FogEnd,
-                    fogstart = services.Lighting.FogStart,
-                    a = a and { Density=a.Density, Offset=a.Offset, Haze=a.Haze, Glare=a.Glare } or nil
+        local saved = nil
+        local function apply()
+            local l = services.Lighting
+            if not saved then
+                local atmosphere = l:FindFirstChildOfClass("Atmosphere")
+                saved = {
+                    fogstart = l.FogStart, fogend = l.FogEnd,
+                    density = atmosphere and atmosphere.Density,
+                    haze = atmosphere and atmosphere.Haze,
+                    glare = atmosphere and atmosphere.Glare,
                 }
             end
-            services.Lighting.FogStart = 0
-            services.Lighting.FogEnd   = 1e6
-            local atm = services.Lighting:FindFirstChildOfClass("Atmosphere")
-            if atm then
-                atm.Density = 0
-                atm.Haze = 0
-                atm.Glare = 0
-                atm.Offset = 0
-            end
+            pcall(function()
+                l.FogStart = 0
+                l.FogEnd = 1e9
+                local atm = l:FindFirstChildOfClass("Atmosphere")
+                if atm then
+                    atm.Density = 0
+                    atm.Haze = 0
+                    atm.Glare = 0
+                end
+            end)
+        end
+        local function revert()
+            if not saved then return end
+            local l = services.Lighting
+            pcall(function()
+                l.FogStart = saved.fogstart
+                l.FogEnd = saved.fogend
+                local atm = l:FindFirstChildOfClass("Atmosphere")
+                if atm then
+                    if saved.density ~= nil then atm.Density = saved.density end
+                    if saved.haze    ~= nil then atm.Haze    = saved.haze end
+                    if saved.glare   ~= nil then atm.Glare   = saved.glare end
+                end
+            end)
+            saved = nil
         end
 
-        local function disable()
-            if not backup then return end
-            services.Lighting.FogStart = backup.fogstart or services.Lighting.FogStart
-            services.Lighting.FogEnd   = backup.fogend or services.Lighting.FogEnd
-            local atm = services.Lighting:FindFirstChildOfClass("Atmosphere")
-            if atm and backup.a then
-                atm.Density = backup.a.Density
-                atm.Haze = backup.a.Haze
-                atm.Glare = backup.a.Glare
-                atm.Offset = backup.a.Offset
-            end
-            backup = nil
+        do
+            local tab = UI.Tabs.Visual or UI.Tabs.Misc
+            local group = tab:AddRightGroupbox("Lighting Mods", "sun")
+            group:AddToggle("NoFogToggle", { Text = "No Fog", Default = false })
+        end
+        if UI.Toggles and UI.Toggles.NoFogToggle then
+            UI.Toggles.NoFogToggle:OnChanged(function(v)
+                if v then apply() else revert() end
+            end)
         end
 
-        -- UI
-        local tab = ui.Tabs.Visual or ui.Tabs.Main
-        local group = tab:AddRightGroupbox("World", "sun")
-        group:AddToggle("NoFogToggle", { Text = "No Fog", Default = false })
+        local function Stop()
+            revert()
+            maid:DoCleaning()
+        end
 
-        ui.Toggles.NoFogToggle:OnChanged(function(state)
-            if state then enable() else disable() end
-        end)
-        if ui.Toggles.NoFogToggle.Value then enable() end
-
-        return { Name = "NoFog", Stop = function() disable(); maid:DoCleaning() end }
+        return { Name = "NoFog", Stop = Stop }
     end
 end
