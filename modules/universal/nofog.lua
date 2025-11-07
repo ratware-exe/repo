@@ -3,46 +3,54 @@ do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
 
-        local saved = { fogstart=nil, fogend=nil, atmosphere_densities = {} }
+        local maid = Maid.new()
+        local backup = nil
 
-        local function start()
-            local L = services.Lighting
-            if saved.fogstart == nil then saved.fogstart = L.FogStart end
-            if saved.fogend == nil then saved.fogend = L.FogEnd end
-            pcall(function()
-                L.FogStart = 1e6
-                L.FogEnd   = 1e6
-            end)
-            for _, a in ipairs(L:GetChildren()) do
-                if a:IsA("Atmosphere") then
-                    saved.atmosphere_densities[a] = a.Density
-                    pcall(function() a.Density = 0 end)
-                end
+        local function enable()
+            if not backup then
+                local a = services.Lighting:FindFirstChildOfClass("Atmosphere")
+                backup = {
+                    fogend = services.Lighting.FogEnd,
+                    fogstart = services.Lighting.FogStart,
+                    a = a and { Density=a.Density, Offset=a.Offset, Haze=a.Haze, Glare=a.Glare } or nil
+                }
             end
-            maid:GiveTask(function()
-                local L2 = services.Lighting
-                if saved.fogstart ~= nil then pcall(function() L2.FogStart = saved.fogstart end) end
-                if saved.fogend ~= nil then pcall(function() L2.FogEnd = saved.fogend end) end
-                for a, d in pairs(saved.atmosphere_densities) do
-                    if a then pcall(function() a.Density = d end) end
-                end
-                saved.atmosphere_densities = {}
-            end)
+            services.Lighting.FogStart = 0
+            services.Lighting.FogEnd   = 1e6
+            local atm = services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if atm then
+                atm.Density = 0
+                atm.Haze = 0
+                atm.Glare = 0
+                atm.Offset = 0
+            end
         end
 
-        local function stop()
-            maid:DoCleaning()
+        local function disable()
+            if not backup then return end
+            services.Lighting.FogStart = backup.fogstart or services.Lighting.FogStart
+            services.Lighting.FogEnd   = backup.fogend or services.Lighting.FogEnd
+            local atm = services.Lighting:FindFirstChildOfClass("Atmosphere")
+            if atm and backup.a then
+                atm.Density = backup.a.Density
+                atm.Haze = backup.a.Haze
+                atm.Glare = backup.a.Glare
+                atm.Offset = backup.a.Offset
+            end
+            backup = nil
         end
 
-        local group = ui.Tabs.Visual:AddRightGroupbox("World", "wind")
-        group:AddToggle("NoFogEnable", { Text="No Fog", Default=false })
+        -- UI
+        local tab = ui.Tabs.Visual or ui.Tabs.Main
+        local group = tab:AddRightGroupbox("World", "sun")
+        group:AddToggle("NoFogToggle", { Text = "No Fog", Default = false })
 
-        ui.Toggles.NoFogEnable:OnChanged(function(v)
-            if v then start() else stop() end
+        ui.Toggles.NoFogToggle:OnChanged(function(state)
+            if state then enable() else disable() end
         end)
+        if ui.Toggles.NoFogToggle.Value then enable() end
 
-        return { Name = "NoFog", Stop = stop }
+        return { Name = "NoFog", Stop = function() disable(); maid:DoCleaning() end }
     end
 end
