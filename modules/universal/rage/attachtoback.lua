@@ -1,209 +1,197 @@
--- modules/universal/attachtoback.lua
+-- modules/universal/rage/attachtoback.lua
 do
     return function(UI)
-        local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
-        local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        -- [1] LOAD DEPENDENCIES
+        local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+        local GlobalEnv = (getgenv and getgenv()) or _G
+        local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
+        -- [2] MODULE STATE
+        local ModuleName = "AttachToBack"
         local Variables = {
-            Maids = { AttachToBack = Maid.new() },
-            AttachToBackEnabled     = false,
-            AttachToBackTargetName  = "",
-            AttachToBackOffsetX     = 0,
-            AttachToBackOffsetY     = 0,
-            AttachToBackOffsetZ     = 2,
+            Maids = { [ModuleName] = Maid.new() },
+            RunFlag = false, -- Corresponds to AttachToBackEnabled
+            AttachToBackTargetName = "",
+            AttachToBackOffsetX = 0,
+            AttachToBackOffsetY = 0,
+            AttachToBackOffsetZ = 2,
             AttachToBackCurrentWeld = nil,
         }
 
+        -- [3] CORE LOGIC
         local function ATB_DestroyWeld()
             if Variables.AttachToBackCurrentWeld then
                 pcall(function() Variables.AttachToBackCurrentWeld:Destroy() end)
                 Variables.AttachToBackCurrentWeld = nil
             end
+            
+            -- Clean up character removing connections
+            local maid = Variables.Maids[ModuleName]
+            if maid["ATB_LocalCharRemoving"] then
+                maid.ATB_LocalCharRemoving = nil -- Disconnects via Maid's __newindex
+            end
+            if maid["ATB_TargetCharRemoving"] then
+                maid.ATB_TargetCharRemoving = nil
+            end
         end
 
-        -- heartbeat loop verbatim
-        Variables.Maids.AttachToBack.ATB_Heartbeat =
-            services.RunService.Heartbeat:Connect(function()
-                if not Variables.AttachToBackEnabled then
+        local function onHeartbeat()
+            if not Variables.RunFlag then return end
+            
+            pcall(function()
+                local LocalPlayer = RbxService.Players.LocalPlayer
+                if not LocalPlayer then
                     ATB_DestroyWeld()
                     return
                 end
-
-                local lp = services.Players.LocalPlayer
-                if not lp then ATB_DestroyWeld() return end
-
+                
                 if not (type(Variables.AttachToBackTargetName) == "string" and Variables.AttachToBackTargetName ~= "") then
                     ATB_DestroyWeld()
                     return
                 end
 
-                local targetPlayer = services.Players:FindFirstChild(Variables.AttachToBackTargetName)
-                if not targetPlayer then ATB_DestroyWeld() return end
+                local targetPlayer = RbxService.Players:FindFirstChild(Variables.AttachToBackTargetName)
+                if not targetPlayer then
+                    ATB_DestroyWeld()
+                    return
+                end
 
-                if not (lp.Character
+                if not (LocalPlayer.Character
                     and targetPlayer.Character
-                    and lp.Character:FindFirstChild("HumanoidRootPart")
+                    and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                     and targetPlayer.Character:FindFirstChild("HumanoidRootPart")) then
                     ATB_DestroyWeld()
                     return
                 end
 
-                local offset = CFrame.new(
+                local attachToBackOffsetCFrame = CFrame.new(
                     tonumber(Variables.AttachToBackOffsetX) or 0,
                     tonumber(Variables.AttachToBackOffsetY) or 0,
                     tonumber(Variables.AttachToBackOffsetZ) or 2
                 )
 
                 if not Variables.AttachToBackCurrentWeld then
-                    -- initial snap (verbatim)
-                    lp.Character:FindFirstChild("HumanoidRootPart").CFrame =
-                        targetPlayer.Character:FindFirstChild("HumanoidRootPart").CFrame * offset
+                    -- initial snap
+                    (LocalPlayer.Character:FindFirstChild("HumanoidRootPart")).CFrame =
+                        (targetPlayer.Character:FindFirstChild("HumanoidRootPart")).CFrame * attachToBackOffsetCFrame
 
                     local newWeld = Instance.new("Weld")
-                    newWeld.Name  = "HummanoidRootBody"
+                    newWeld.Name = "HummanoidRootBody"
                     newWeld.Part0 = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    newWeld.Part1 = lp.Character:FindFirstChild("HumanoidRootPart")
-                    newWeld.C0    = offset
-                    newWeld.C1    = CFrame.new()
-                    newWeld.Parent = lp.Character:FindFirstChild("HumanoidRootPart")
+                    newWeld.Part1 = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    newWeld.C0 = attachToBackOffsetCFrame
+                    newWeld.C1 = CFrame.new()
+                    newWeld.Parent = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                     Variables.AttachToBackCurrentWeld = newWeld
 
-                    -- cleanup on either character despawn (verbatim)
-                    Variables.Maids.AttachToBack.ATB_LocalCharRemoving =
-                        lp.CharacterRemoving:Connect(function()
-                            ATB_DestroyWeld()
-                        end)
-                    Variables.Maids.AttachToBack.ATB_TargetCharRemoving =
-                        targetPlayer.CharacterRemoving:Connect(function()
-                            ATB_DestroyWeld()
-                        end)
+                    -- cleanup on either character despawn
+                    Variables.Maids[ModuleName].ATB_LocalCharRemoving =
+                        LocalPlayer.CharacterRemoving:Connect(ATB_DestroyWeld)
+                    
+                    Variables.Maids[ModuleName].ATB_TargetCharRemoving =
+                        targetPlayer.CharacterRemoving:Connect(ATB_DestroyWeld)
                 else
                     -- live offset updates
-                    Variables.AttachToBackCurrentWeld.C0 = offset
+                    Variables.AttachToBackCurrentWeld.C0 = attachToBackOffsetCFrame
                 end
             end)
-
-        Variables.Maids.AttachToBack.ATB_Cleanup = ATB_DestroyWeld
-
-        -- UI (verbatim IDs)
-        do
-            local tab = UI.Tabs.Main or UI.Tabs.Misc
-            local group = tab:AddLeftGroupbox("Attach To Back", "paperclip")
-            group:AddDropdown("AttachToBackDropdown", {
-                SpecialType = "Player",
-                ExcludeLocalPlayer = true,
-                Text = "Select Target:",
-                Tooltip = "Select attach to back target player.",
-            })
-            group:AddToggle("AttachToBackToggle", {
-                Text = "Enable",
-                Tooltip = "Turns attach to back [ON]/[OFF].",
-                DisabledTooltip = "Feature Disabled!",
-                Default = false,
-                Disabled = false,
-                Visible = true,
-                Risky = false,
-            })
-            UI.Toggles.AttachToBackToggle:AddKeyPicker("AttachToBackKeybind", {
-                Text = "Attach To Back",
-                SyncToggleState = true,
-                Mode = "Toggle",
-                NoUI = false,
-            })
-            group:AddSlider("AttachToBackToggleXSlider", {
-                Text = "[X] Distance",
-                Default = 0, Min = -250, Max = 250, Rounding = 1, Compact = true,
-                Tooltip = "Changes attach to back [X] axis distance.",
-                DisabledTooltip = "Feature Disabled!",
-                Disabled = false, Visible = true,
-            })
-            group:AddSlider("AttachToBackToggleYSlider", {
-                Text = "[Y] Distance",
-                Default = 0, Min = -250, Max = 250, Rounding = 1, Compact = true,
-                Tooltip = "Changes attach to back [Y] axis distance.",
-                DisabledTooltip = "Feature Disabled!",
-                Disabled = false, Visible = true,
-            })
-            group:AddSlider("AttachToBackToggleZSlider", {
-                Text = "[Z] Distance",
-                Default = 0, Min = -250, Max = 250, Rounding = 1, Compact = true,
-                Tooltip = "Changes attach to back [Z] axis distance.",
-                DisabledTooltip = "Feature Disabled!",
-                Disabled = false, Visible = true,
-            })
         end
 
-        -- OnChanged (verbatim hookups)
-        do
-            if UI.Toggles and UI.Toggles.AttachToBackToggle and UI.Toggles.AttachToBackToggle.OnChanged then
-                Variables.Maids.AttachToBack.ATB_ToggleConn =
-                    UI.Toggles.AttachToBackToggle:OnChanged(function(state)
-                        Variables.AttachToBackEnabled = state and true or false
-                        if not Variables.AttachToBackEnabled then
-                            local cleanup = Variables.Maids.AttachToBack.ATB_Cleanup
-                            if cleanup then pcall(cleanup) end
-                        end
-                    end)
-                Variables.AttachToBackEnabled = UI.Toggles.AttachToBackToggle.Value and true or false
-            end
-
-            if UI.Options and UI.Options.AttachToBackDropdown and UI.Options.AttachToBackDropdown.OnChanged then
-                Variables.Maids.AttachToBack.ATB_TargetConn =
-                    UI.Options.AttachToBackDropdown:OnChanged(function(value)
-                        if typeof(value) == "Instance" and value:IsA("Player") then
-                            Variables.AttachToBackTargetName = value.Name
-                        elseif type(value) == "string" then
-                            Variables.AttachToBackTargetName = value
-                        else
-                            Variables.AttachToBackTargetName = ""
-                        end
-                        local cleanup = Variables.Maids.AttachToBack.ATB_Cleanup
-                        if cleanup then pcall(cleanup) end
-                    end)
-                -- initialize current dropdown value
-                do
-                    local v = UI.Options.AttachToBackDropdown.Value
-                    if typeof(v) == "Instance" and v:IsA("Player") then
-                        Variables.AttachToBackTargetName = v.Name
-                    elseif type(v) == "string" then
-                        Variables.AttachToBackTargetName = v
-                    else
-                        Variables.AttachToBackTargetName = ""
-                    end
-                end
-            end
-
-            if UI.Options and UI.Options.AttachToBackToggleXSlider and UI.Options.AttachToBackToggleXSlider.OnChanged then
-                Variables.Maids.AttachToBack.ATB_XConn =
-                    UI.Options.AttachToBackToggleXSlider:OnChanged(function(n)
-                        Variables.AttachToBackOffsetX = tonumber(n) or Variables.AttachToBackOffsetX
-                    end)
-                Variables.AttachToBackOffsetX = tonumber(UI.Options.AttachToBackToggleXSlider.Value) or Variables.AttachToBackOffsetX
-            end
-
-            if UI.Options and UI.Options.AttachToBackToggleYSlider and UI.Options.AttachToBackToggleYSlider.OnChanged then
-                Variables.Maids.AttachToBack.ATB_YConn =
-                    UI.Options.AttachToBackToggleYSlider:OnChanged(function(n)
-                        Variables.AttachToBackOffsetY = tonumber(n) or Variables.AttachToBackOffsetY
-                    end)
-                Variables.AttachToBackOffsetY = tonumber(UI.Options.AttachToBackToggleYSlider.Value) or Variables.AttachToBackOffsetY
-            end
-
-            if UI.Options and UI.Options.AttachToBackToggleZSlider and UI.Options.AttachToBackToggleZSlider.OnChanged then
-                Variables.Maids.AttachToBack.ATB_ZConn =
-                    UI.Options.AttachToBackToggleZSlider:OnChanged(function(n)
-                        Variables.AttachToBackOffsetZ = tonumber(n) or Variables.AttachToBackOffsetZ
-                    end)
-                Variables.AttachToBackOffsetZ = tonumber(UI.Options.AttachToBackToggleZSlider.Value) or Variables.AttachToBackOffsetZ
-            end
+        local function Start()
+            if Variables.RunFlag then return end
+            Variables.RunFlag = true
+            
+            local maid = Variables.Maids[ModuleName]
+            maid:GiveTask(RbxService.RunService.Heartbeat:Connect(onHeartbeat))
+            maid:GiveTask(function() Variables.RunFlag = false end)
+            maid:GiveTask(ATB_DestroyWeld) -- Final cleanup
         end
 
         local function Stop()
-            Variables.AttachToBackEnabled = false
-            Variables.Maids.AttachToBack:DoCleaning()
-            ATB_DestroyWeld()
+            if not Variables.RunFlag then return end
+            Variables.RunFlag = false
+            Variables.Maids[ModuleName]:DoCleaning()
         end
 
-        return { Name = "AttachToBack", Stop = Stop }
+        -- [4] UI CREATION
+        local AttachToBackGroupBox = UI.Tabs.Main:AddLeftGroupbox("Attach To Back", "paperclip")
+		AttachToBackGroupBox:AddDropdown("AttachToBackDropdown", {
+			SpecialType = "Player",
+			ExcludeLocalPlayer = true, 
+			Text = "Select Target:",
+			Tooltip = "Select attach to back target player.", 
+		})
+		local AttachToBackToggle = AttachToBackGroupBox:AddToggle("AttachToBackToggle", {
+			Text = "Enable",
+			Tooltip = "Turns attach to back [ON]/[OFF].", 
+			Default = false, 
+		})
+		UI.Toggles.AttachToBackToggle:AddKeyPicker("AttachToBackKeybind", {
+			Text = "Attach To Back",
+			SyncToggleState = true,
+			Mode = "Toggle", 
+		})
+		AttachToBackGroupBox:AddSlider("AttachToBackToggleXSlider", {
+			Text = "[X] Distance",
+			Default = 0,
+			Min = -250,
+			Max = 250,
+			Rounding = 1,
+			Compact = true,
+			Tooltip = "Changes attach to back [X] axis distance.", 
+		})
+		AttachToBackGroupBox:AddSlider("AttachToBackToggleYSlider", {
+			Text = "[Y] Distance",
+			Default = 0,
+			Min = -250,
+			Max = 250,
+			Rounding = 1,
+			Compact = true,
+			Tooltip = "Changes attach to back [Y] axis distance.", 
+		})
+		AttachToBackGroupBox:AddSlider("AttachToBackToggleZSlider", {
+			Text = "[Z] Distance",
+			Default = 2, -- Default was 0 in UI but 2 in logic, using 2 to match logic
+			Min = -250,
+			Max = 250,
+			Rounding = 1,
+			Compact = true,
+			Tooltip = "Changes attach to back [Z] axis distance.", 
+		})
+
+        -- [5] UI WIRING (CORRECTED)
+        UI.Toggles.AttachToBackToggle:OnChanged(function(enabledState)
+            if enabledState then Start() else Stop() end
+        end)
+        
+        local function updateTarget(value)
+            if typeof(value) == "Instance" and value:IsA("Player") then
+                Variables.AttachToBackTargetName = value.Name
+            elseif type(value) == "string" then
+                Variables.AttachToBackTargetName = value
+            else
+                Variables.AttachToBackTargetName = ""
+            end
+            ATB_DestroyWeld() -- Drop stale weld when target changes
+        end
+        UI.Options.AttachToBackDropdown:OnChanged(updateTarget)
+        
+        UI.Options.AttachToBackToggleXSlider:OnChanged(function(n) Variables.AttachToBackOffsetX = tonumber(n) or 0 end)
+        UI.Options.AttachToBackToggleYSlider:OnChanged(function(n) Variables.AttachToBackOffsetY = tonumber(n) or 0 end)
+        UI.Options.AttachToBackToggleZSlider:OnChanged(function(n) Variables.AttachToBackOffsetZ = tonumber(n) or 2 end)
+        
+        -- Seed default values
+        updateTarget(UI.Options.AttachToBackDropdown.Value)
+        Variables.AttachToBackOffsetX = tonumber(UI.Options.AttachToBackToggleXSlider.Value) or 0
+        Variables.AttachToBackOffsetY = tonumber(UI.Options.AttachToBackToggleYSlider.Value) or 0
+        Variables.AttachToBackOffsetZ = tonumber(UI.Options.AttachToBackToggleZSlider.Value) or 2
+        
+        -- Start if already enabled
+        if UI.Toggles.AttachToBackToggle.Value then
+            Start()
+        end
+
+        -- [6] RETURN MODULE
+        return { Name = ModuleName, Stop = Stop }
     end
 end
