@@ -157,7 +157,7 @@ do
 	    bindOnChanged(UI.Toggles.GyroToggle, function(v)
 	        Variables.RunFlag = v and true or false
 	        if Variables.RunFlag then refreshSeatVehicle() end
-	    end))
+	    end)
 	    Variables.RunFlag = UI.Toggles.GyroToggle.Value and true or false -- Seed flag
 	
 	    if UI.Options.XAxisAngle then
