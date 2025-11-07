@@ -1,5 +1,4 @@
 -- "modules/wfyb/gyroscope.lua",
-print('new gyro2')
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
