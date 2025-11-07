@@ -1,19 +1,31 @@
 -- modules/wfyb/teleport.lua
+-- modules/universal/teleport.lua
 do
     return function(UserInterface)
         local Services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
-        local Maid = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
         local CleanupMaid = Maid.new()
 
-        -- Module-specific state
-        local ModuleState = {
+        -- Module-specific state, now correctly in a 'Variables' table
+        local Variables = {
             TeleportCFrameInputString = "0, 0, 0",
             PlayerTPTargetName = "",
             BoatTPSelectedDisplay = "",
             BoatTPSelectedModelName = "",
             UniversalBoatList = {},  -- values filled live
             UniversalBoatRenameInterval = 3,
+            notify = nil, -- Will be populated below
         }
+        
+        -- Add the notify function from prompt.lua
+        Variables.notify = Variables.notify or function(messageText)
+	        if UserInterface and UserInterface.Notify then
+	            pcall(UserInterface.Notify, UserInterface, messageText, 6)
+	        else
+	            print("[Notify]", messageText)
+	        end
+	    end
+
 
         -- Utilities from prompt.lua (verbatim)
         local function GetBoatsFolder()
@@ -127,29 +139,29 @@ do
 
         -- CFrame TP Logic (from prompt.lua)
         local function ApplyCFrameTeleport()
-            local TeleportInput = tostring(ModuleState.TeleportCFrameInputString or "")
+            local TeleportInput = tostring(Variables.TeleportCFrameInputString or "")
             local XString, YString, ZString = string.match(
                 TeleportInput,
                 "^%s*([%-%.%d]+)%s*,%s*([%-%.%d]+)%s*,%s*([%-%.%d]+)%s*$"
             )
             if not (XString and YString and ZString) then
-                if ModuleState.notify then ModuleState.notify("Teleport: invalid format. Use: X, Y, Z") end
+                if Variables.notify then Variables.notify("Teleport: invalid format. Use: X, Y, Z") end
                 return
             end
             local XNumber = tonumber(XString); local YNumber = tonumber(YString); local ZNumber = tonumber(ZString)
             if not (XNumber and YNumber and ZNumber) then
-                if ModuleState.notify then ModuleState.notify("Teleport: could not parse numbers.") end
+                if Variables.notify then Variables.notify("Teleport: could not parse numbers.") end
                 return
             end
             local LocalPlayer = Services.Players.LocalPlayer
             local Character = LocalPlayer and LocalPlayer.Character
             if not Character then
-                if ModuleState.notify then ModuleState.notify("Teleport: character not ready.") end
+                if Variables.notify then Variables.notify("Teleport: character not ready.") end
                 return
             end
             local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
             if not HumanoidRootPart then
-                if ModuleState.notify then ModuleState.notify("Teleport: HumanoidRootPart not found.") end
+                if Variables.notify then Variables.notify("Teleport: HumanoidRootPart not found.") end
                 return
             end
             HumanoidRootPart.CFrame = CFrame.new(XNumber, YNumber, ZNumber)
@@ -157,7 +169,7 @@ do
 
         -- Player TP Logic (from prompt.lua)
         local function ExecutePlayerTeleport()
-            local ChosenTargetName = ModuleState.PlayerTPTargetName
+            local ChosenTargetName = Variables.PlayerTPTargetName
             if UserInterface.Options and UserInterface.Options.PlayerTPDropdown and UserInterface.Options.PlayerTPDropdown.Value ~= nil then
                 local DropdownValue = UserInterface.Options.PlayerTPDropdown.Value
                 if typeof(DropdownValue) == "Instance" and DropdownValue:IsA("Player") then
@@ -168,33 +180,33 @@ do
             end
 
             if type(ChosenTargetName) ~= "string" or ChosenTargetName == "" then
-                if ModuleState.notify then ModuleState.notify("Player TP: Please Select Target!") end
+                if Variables.notify then Variables.notify("Player TP: Please Select Target!") end
                 return
             end
 
             local TargetPlayer = Services.Players:FindFirstChild(ChosenTargetName)
             if not TargetPlayer then
-                if ModuleState.notify then ModuleState.notify("Player TP: Target Not Found!") end
+                if Variables.notify then Variables.notify("Player TP: Target Not Found!") end
                 return
             end
 
             local LocalPlayer = Services.Players.LocalPlayer
             local Character = LocalPlayer and LocalPlayer.Character
             if not Character then
-                 if ModuleState.notify then ModuleState.notify("Player TP: You're Not Spawned In!.") end
+                 if Variables.notify then Variables.notify("Player TP: You're Not Spawned In!.") end
                 return
             end
 
             local TargetCharacter = TargetPlayer.Character
             if not TargetCharacter then
-                if ModuleState.notify then ModuleState.notify("Player TP: Character Missing!") end
+                if Variables.notify then Variables.notify("Player TP: Character Missing!") end
                 return
             end
 
             local LocalHumanoidRootPart  = Character:FindFirstChild("HumanoidRootPart")
             local TargetHumanoidRootPart = TargetCharacter:FindFirstChild("HumanoidRootPart")
             if not (LocalHumanoidRootPart and TargetHumanoidRootPart) then
-                if ModuleState.notify then ModuleState.notify("Player TP: Target Not Found!") end
+                if Variables.notify then Variables.notify("Player TP: Target Not Found!") end
                 return
             end
 
@@ -207,33 +219,33 @@ do
             local Character  = LocalPlayer and LocalPlayer.Character
             local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
             if not HumanoidRootPart then
-                if ModuleState.notify then ModuleState.notify("Boat TP: Character not ready.") end
+                if Variables.notify then Variables.notify("Boat TP: Character not ready.") end
                 return
             end
 
-            local SelectedDisplayString = ModuleState.BoatTPSelectedDisplay
+            local SelectedDisplayString = Variables.BoatTPSelectedDisplay
             if UserInterface.Options and UserInterface.Options.UniversalBoatDropdown then
                 SelectedDisplayString = tostring(UserInterface.Options.UniversalBoatDropdown.Value or SelectedDisplayString)
             end
-            ModuleState.BoatTPSelectedDisplay = SelectedDisplayString
+            Variables.BoatTPSelectedDisplay = SelectedDisplayString
 
             local OwnerName, BoatName, ModelName = ParseDropdownDisplay(SelectedDisplayString)
-            ModuleState.BoatTPSelectedModelName = ModelName or ""
+            Variables.BoatTPSelectedModelName = ModelName or ""
 
             if (not OwnerName and not ModelName) or (ModelName == "" and (not BoatName or BoatName == "")) then
-                if ModuleState.notify then ModuleState.notify("Boat TP: Please select a boat.") end
+                if Variables.notify then Variables.notify("Boat TP: Please select a boat.") end
                 return
             end
 
             local BoatsFolder = GetBoatsFolder()
             if not BoatsFolder then
-                if ModuleState.notify then ModuleState.notify("Boat TP: Boats folder not set.") end
+                if Variables.notify then Variables.notify("Boat TP: Boats folder not set.") end
                 return
             end
 
             local TargetBoatModel = FindTargetBoatModel(BoatsFolder, OwnerName, BoatName, ModelName)
             if not TargetBoatModel then
-                if ModuleState.notify then ModuleState.notify("Boat TP: Target boat not found.") end
+                if Variables.notify then Variables.notify("Boat TP: Target boat not found.") end
                 return
             end
 
@@ -247,7 +259,7 @@ do
             end
 
             if not TargetCFrame then
-                if ModuleState.notify then ModuleState.notify("Boat TP: Could not resolve boat position.") end
+                if Variables.notify then Variables.notify("Boat TP: Could not resolve boat position.") end
                 return
             end
 
@@ -282,7 +294,11 @@ do
             end
 
             local function RebuildUniversalBoatList()
-                if not UniversalBoatsFolderReference then return end
+                if not UniversalBoatsFolderReference then 
+                    -- This function runs in a loop, notify check is good
+                    if Variables.notify then Variables.notify("Boat TP: Boats folder not set.") end
+                    return
+                end
 
                 local DisplayEntries = {}
                 for ChildIndex, ChildModel in ipairs(UniversalBoatsFolderReference:GetChildren()) do
@@ -300,12 +316,12 @@ do
                     return LeftString:lower() < RightString:lower()
                 end)
 
-                table.clear(ModuleState.UniversalBoatList)
+                table.clear(Variables.UniversalBoatList)
                 for ListIndex = 1, #DisplayEntries do
-                    ModuleState.UniversalBoatList[ListIndex] = DisplayEntries[ListIndex]
+                    Variables.UniversalBoatList[ListIndex] = DisplayEntries[ListIndex]
                 end
 
-                SetDropdownValues(UserInterface.Options and UserInterface.Options.UniversalBoatDropdown, ModuleState.UniversalBoatList)
+                SetDropdownValues(UserInterface.Options and UserInterface.Options.UniversalBoatDropdown, Variables.UniversalBoatList)
             end
 
             if UniversalBoatsFolderReference then
@@ -331,18 +347,18 @@ do
 
                 local RenamerThread = task.spawn(function()
                     while true do
-                        local RefreshSeconds = tonumber(ModuleState.UniversalBoatRenameInterval) or 3
+                        local RefreshSeconds = tonumber(Variables.UniversalBoatRenameInterval) or 3
                         if RefreshSeconds <= 0 then RefreshSeconds = 0.1 end
                         RebuildUniversalBoatList()
                         task.wait(RefreshSeconds)
                     end
                 end)
-                CleanupMaid:GiveTask(RenamerThread)
+                CleanupMaid:GiveTask(RenamerThread) -- This should no longer error
 
                 RebuildUniversalBoatList()
                 task.defer(function()
                     if UserInterface.Options and UserInterface.Options.UniversalBoatDropdown then
-                        SetDropdownValues(UserInterface.Options.UniversalBoatDropdown, ModuleState.UniversalBoatList)
+                        SetDropdownValues(UserInterface.Options.UniversalBoatDropdown, Variables.UniversalBoatList)
                     end
                 end)
             end
@@ -393,7 +409,7 @@ do
 
             local BoatTab = PlayerBoatTabbox:AddTab("Boat TP")
             BoatTab:AddDropdown("UniversalBoatDropdown", {
-                Values = ModuleState.UniversalBoatList,
+                Values = Variables.UniversalBoatList,
                 Text = "Search or Select Boat:",
                 Multi = false,
                 Tooltip = "Click on target & close dropdown to confirm selection.",
@@ -417,7 +433,7 @@ do
             -- CFrame Input
             if UserInterface.Options and UserInterface.Options.TeleportcFrame and UserInterface.Options.TeleportcFrame.OnChanged then
                 CleanupMaid:GiveTask(UserInterface.Options.TeleportcFrame:OnChanged(function(Text)
-                    ModuleState.TeleportCFrameInputString = tostring(Text or "")
+                    Variables.TeleportCFrameInputString = tostring(Text or "")
                 end))
             end
 
@@ -425,11 +441,11 @@ do
             if UserInterface.Options and UserInterface.Options.PlayerTPDropdown and UserInterface.Options.PlayerTPDropdown.OnChanged then
                  CleanupMaid:GiveTask(UserInterface.Options.PlayerTPDropdown:OnChanged(function(PlayerTeleportDropdownValue)
                     if typeof(PlayerTeleportDropdownValue) == "Instance" and PlayerTeleportDropdownValue:IsA("Player") then
-                        ModuleState.PlayerTPTargetName = PlayerTeleportDropdownValue.Name
+                        Variables.PlayerTPTargetName = PlayerTeleportDropdownValue.Name
                     elseif type(PlayerTeleportDropdownValue) == "string" then
-                        ModuleState.PlayerTPTargetName = PlayerTeleportDropdownValue
+                        Variables.PlayerTPTargetName = PlayerTeleportDropdownValue
                     else
-                        ModuleState.PlayerTPTargetName = ""
+                        Variables.PlayerTPTargetName = ""
                     end
                 end))
             end
@@ -439,9 +455,9 @@ do
             if DropdownOption then
                 local function OnDropdownChanged(NewValue)
                     local AsString = tostring(NewValue or "")
-                    ModuleState.BoatTPSelectedDisplay = AsString
+                    Variables.BoatTPSelectedDisplay = AsString
                     local _, _, ParsedModelName = ParseDropdownDisplay(AsString)
-                    ModuleState.BoatTPSelectedModelName = ParsedModelName or ""
+                    Variables.BoatTPSelectedModelName = ParsedModelName or ""
                 end
 
                 if DropdownOption.OnChanged then
