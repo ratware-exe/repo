@@ -14,10 +14,11 @@ do
 local featurePaths = {
     "dependency/UIRegistry.lua",
     "modules/universal/errorsuppressor.lua",
-    -- Movement / Bypass / Teleport / Vehicle tools
-    "modules/universal/speedhack.lua",
-    "modules/universal/flight.lua",
-    "modules/universal/noclip.lua",
+    -- Movement 
+    "modules/universal/movement/speedhack.lua",
+    "modules/universal/movement/flight.lua",
+    "modules/universal/movement/noclip.lua",
+        
     "modules/wfyb/infinitestamina.lua",
     "modules/universal/attachtoback.lua",
     "modules/wfyb/teleport.lua",
