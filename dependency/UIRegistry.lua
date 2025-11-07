@@ -1,10 +1,11 @@
 -- "dependency/UIRegistry.lua",
+print('new')
 do
   return function(UserInterface)
     -- Shared deps (your system)
-    local Services   = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
-    local Maid       = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-    local Signal     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
+    local Services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+    local Maid = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+    local Signal = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
 
     local CleanupMaid = Maid.new()
     local GlobalEnvironment = (getgenv and getgenv()) or _G
@@ -69,20 +70,20 @@ do
     if type(UserInterface.GetTab) == "function" then
       local OriginalFunction = UserInterface.GetTab
       UserInterface.GetTab = function(self, Name, ...)
-        local ExistingTab = OriginalFunction(self, Name, ...)
-        if type(ExistingTab) == "table" then
-          patch_tab(ExistingTab, Name) -- Patch the retrieved tab (idempotent)
+        local NewElement
+        if Configuration then
+          Configuration.Func = EventAggregator
+          NewElement = OriginalFunction(self, Configuration)
+        else
+          NewElement = OriginalFunction(self, ButtonText, EventAggregator)
         end
-        return ExistingTab
+        if StorageKey then remember("button", StorageKey, NewElement) end
+        patch_button_host(NewElement) -- nested buttons
+        patch_keypicker_host(NewElement) -- FIX: Add keypicker patch
+        patch_colorpicker_host(NewElement) -- FIX: Add colorpicker patch
+        return NewElement
       end
-      CleanupMaid:GiveTask(function() UserInterface.GetTab = OriginalFunction end)
-    end
-
-    -- SelectTab doesn't return a tab, so just needs to be restored.
-    if type(UserInterface.SelectTab) == "function" then
-      local OriginalFunction = UserInterface.SelectTab
-      -- We don't need to register/dedupe this, just restore the function.
-      CleanupMaid:GiveTask(function() UserInterface.SelectTab = OriginalFunction end)
+      CleanupMaid:GiveTask(function() HostObject.AddButton = OriginalFunction end)
     end
 
     ---------------------------------------------------------------------------
