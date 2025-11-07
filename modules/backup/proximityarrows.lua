@@ -1,4 +1,4 @@
--- modules/backup/proximityarrows.lua
+-- "modules/backup/proximityarrows.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
