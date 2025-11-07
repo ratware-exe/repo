@@ -283,7 +283,7 @@ do
 			Tooltip = "Changes flight speed.", 
 		})
         
-        -- [5] UI WIRING
+        -- [5] UI WIRING (CORRECTED)
         UI.Toggles.FlightToggle:OnChanged(function(enabledState)
             if enabledState then Start() else Stop() end
         end)
@@ -293,11 +293,10 @@ do
         end)
         
         -- Seed default values from UI
-        Variables.RunFlag = UI.Toggles.FlightToggle.Value
         Variables.FlightSpeed = tonumber(UI.Options.FlightSlider.Value) or 250
         
         -- Start if already enabled
-        if Variables.RunFlag then
+        if UI.Toggles.FlightToggle.Value then
             Start()
         end
 
