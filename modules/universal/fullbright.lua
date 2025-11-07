@@ -3,39 +3,39 @@ do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
 
-        local saved = { outdoor = nil, ambient = nil, exposure = nil }
+        local maid = Maid.new()
+        local running = false
+        local intensity = 3
+
+        local function step()
+            if not running then return end
+            pcall(function()
+                services.Lighting.Brightness = tonumber(intensity) or intensity
+                services.Lighting.ClockTime = 12
+            end)
+        end
 
         local function start()
-            local L = services.Lighting
-            if saved.outdoor == nil then saved.outdoor = L.OutdoorAmbient end
-            if saved.ambient == nil then saved.ambient = L.Ambient end
-            if saved.exposure == nil then saved.exposure = L.ExposureCompensation end
-            pcall(function()
-                L.OutdoorAmbient = Color3.new(1,1,1)
-                L.Ambient = Color3.new(1,1,1)
-                L.ExposureCompensation = 0
-            end)
-            maid:GiveTask(function()
-                pcall(function()
-                    if saved.outdoor then L.OutdoorAmbient = saved.outdoor end
-                    if saved.ambient then L.Ambient = saved.ambient end
-                    if saved.exposure ~= nil then L.ExposureCompensation = saved.exposure end
-                end)
-            end)
+            if running then return end
+            running = true
+            local rs = services.RunService.RenderStepped:Connect(step)
+            maid:GiveTask(rs)
+            maid:GiveTask(function() running = false end)
         end
+        local function stop() running = false; maid:DoCleaning() end
 
-        local function stop()
-            maid:DoCleaning()
+        -- UI (Visual)
+        local tab = ui.Tabs.Visual or ui.Tabs.Main
+        local group = tab:AddRightGroupbox("World", "sun")
+        group:AddToggle("FullbrightToggle", { Text = "Fullbright", Default = false })
+        group:AddSlider("FullbrightSlider", { Text="Intensity", Default = 3, Min=0, Max=8, Rounding=1, Compact=true })
+
+        if ui.Options.FullbrightSlider then
+            ui.Options.FullbrightSlider:OnChanged(function(v) intensity = tonumber(v) or intensity end)
+            intensity = tonumber(ui.Options.FullbrightSlider.Value) or intensity
         end
-
-        local group = ui.Tabs.Visual:AddRightGroupbox("World", "sun")
-        group:AddToggle("FullbrightEnable", { Text="Fullbright", Default=false })
-
-        ui.Toggles.FullbrightEnable:OnChanged(function(v)
-            if v then start() else stop() end
-        end)
+        ui.Toggles.FullbrightToggle:OnChanged(function(v) if v then start() else stop() end end)
 
         return { Name = "Fullbright", Stop = stop }
     end
