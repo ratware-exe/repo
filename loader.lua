@@ -32,6 +32,9 @@ do
     })
 
     local Tabs = {
+        Main = Window:AddTab("Main", "grip"),
+	    Automation = Window:AddTab("Automation", "bot"),
+	    Visual = Window:AddTab("Visual", "glasses"),
         EXP = Window:AddTab("EXP", "tractor"),
     	Dupe = Window:AddTab("Dupe", "dollar-sign"),
         Visuals = Window:AddTab("Visuals", "eye"),
