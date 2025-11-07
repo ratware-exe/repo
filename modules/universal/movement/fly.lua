@@ -285,7 +285,6 @@ do
         
         -- [5] UI WIRING
         UI.Toggles.FlightToggle:OnChanged(function(enabledState)
-            Variables.RunFlag = enabledState
             if enabledState then Start() else Stop() end
         end)
         
