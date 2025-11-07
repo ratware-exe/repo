@@ -55,7 +55,7 @@ do
         local function Stop()
             if not Variables.RunFlag then return end
             Variables.RunFlag = false
-            Variables.Maids.InfZoom:DoCleaning()
+            Variables.Maids.InfiniteZoom:DoCleaning() 
 
             local LocalPlayer = RbxService.Players.LocalPlayer
             if LocalPlayer and Variables.Backup then
@@ -68,8 +68,8 @@ do
         end
 
         -- UI
-        local CameraGroupbox = UI.Tabs.Misc:AddLeftGroupbox("Infinite Zoom", "mouse-pointer-2")
-        cameramodgroupbox:AddToggle("InfiniteZoomToggle", {
+        local CameraGroupBox = UI.Tabs.Misc:AddLeftGroupbox("Infinite Zoom", "mouse-pointer-2")
+        CameraGroupBox:AddToggle("InfiniteZoomToggle", { 
             Text = "Infinite Zoom",
             Tooltip = "Allows you to zoom out infinitely.",
             Default = false,
