@@ -137,7 +137,27 @@ do
         end
 
         -- [4] UI CREATION
-        -- UI is already created by loader. This module just wires it up.
+        local MovementGroupBox = UI.Tabs.Main:AddLeftGroupbox("Movement", "person-standing")
+        
+        local SpeedhackToggle = MovementGroupBox:AddToggle("SpeedhackToggle", {
+			Text = "Speedhack",
+			Tooltip = "Makes your extremely fast.", 
+			Default = false, 
+		})
+		UI.Toggles.SpeedhackToggle:AddKeyPicker("SpeedhackKeybind", {
+			Text = "Speedhack",
+			SyncToggleState = true,
+			Mode = "Toggle", 
+		})
+		MovementGroupBox:AddSlider("SpeedhackSlider", {
+			Text = "Speed",
+			Default = 250,
+			Min = 0,
+			Max = 500,
+			Rounding = 1,
+			Compact = true,
+			Tooltip = "Changes speedhack speed.", 
+		})
         
         -- [5] UI WIRING
         UI.Toggles.SpeedhackToggle:OnChanged(function(enabledState)
