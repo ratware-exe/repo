@@ -1,4 +1,4 @@
--- modules/universal/gyroscope.lua
+-- "modules/wfyb/gyroscope.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
