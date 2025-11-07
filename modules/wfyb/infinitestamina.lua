@@ -1,86 +1,92 @@
--- modules/universal/infinite_stamina.lua
+-- "modules/wfyb/infinite_stamina.lua",
 do
     return function(UI)
-        local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
-        local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
+        -- [1] LOAD DEPENDENCIES
+        local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+        local GlobalEnv = (getgenv and getgenv()) or _G
+        local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
+        -- [2] MODULE STATE
+        local ModuleName = "InfiniteStamina"
         local Variables = {
-            StaminaToggle = false,
-            StaminaApplied = false,
+            Maids = { [ModuleName] = Maid.new() },
+            RunFlag = false, -- Corresponds to StaminaToggle
             StaminaOriginalWaterLevel = nil,
+            StaminaApplied = false,
+            NotifyFunc = nil -- Placeholder for notifier
         }
 
-        -- verbatim helpers from prompt.lua
-        local function getGC()
-            local nevermore = require(services.ReplicatedStorage:WaitForChild("Nevermore"))
-            return nevermore("GameConstants")
+        -- [3] CORE LOGIC
+        local function notify(msg)
+            if Variables.NotifyFunc then
+                pcall(Variables.NotifyFunc, msg)
+            else
+                print(msg) -- Fallback
+            end
         end
 
-        function Variables.ApplyStaminaPatch()
-            if Variables.StaminaApplied then return end
-            local GC = getGC()
-            if GC then
-                if type(Variables.StaminaOriginalWaterLevel) ~= "number" then
+        local function getGC()
+            local ok, Nevermore = pcall(require, RbxService.ReplicatedStorage:WaitForChild("Nevermore"))
+            if not ok then return nil end
+            local ok2, GC = pcall(Nevermore, "GameConstants")
+            return (ok2 and typeof(GC) == "table") and GC or nil
+        end
+        
+        local function Start()
+            if Variables.RunFlag then return end
+            Variables.RunFlag = true
+            
+            pcall(function()
+                local GC = getGC()
+                if not GC or type(GC.WATER_LEVEL_TORSO) ~= "number" then return end
+                if Variables.StaminaOriginalWaterLevel == nil then
                     Variables.StaminaOriginalWaterLevel = GC.WATER_LEVEL_TORSO
                 end
-                GC.WATER_LEVEL_TORSO = -math.huge
+                GC.WATER_LEVEL_TORSO = -1e9
                 Variables.StaminaApplied = true
-                if Variables.notify then Variables.notify("Infinite Stamina: [ON].") end
-            end
-        end
-
-        function Variables.RevertStaminaPatch()
-            if not Variables.StaminaApplied then return end
-            local GC = getGC()
-            if GC and type(Variables.StaminaOriginalWaterLevel) == "number" then
-                GC.WATER_LEVEL_TORSO = Variables.StaminaOriginalWaterLevel
-            end
-            Variables.StaminaApplied = false
-            if Variables.notify then
-                Variables.notify("Infinite Stamina: [OFF].")
-            end
-        end
-
-        -- UI (verbatim)
-        do
-            local tab = UI.Tabs.Main or UI.Tabs.Misc
-            local group = tab:AddLeftGroupbox("Bypass", "shield-off")
-            group:AddToggle("InfiniteStaminaToggle", {
-                Text = "Infinite Stamina",
-                Tooltip = "Stay underwater indefinitely.",
-                DisabledTooltip = "Feature Disabled!",
-                Default = false,
-                Disabled = false,
-                Visible = true,
-                Risky = false,
-            })
-        end
-
-        -- OnChanged (verbatim)
-        if UI.Toggles and UI.Toggles.InfiniteStaminaToggle then
-            UI.Toggles.InfiniteStaminaToggle:OnChanged(function(v)
-                Variables.StaminaToggle = v and true or false
-                if Variables.StaminaToggle then
-                    Variables.ApplyStaminaPatch()
-                else
-                    Variables.RevertStaminaPatch()
-                end
+                notify("Infinite Stamina: [ON].")
             end)
-            Variables.StaminaToggle = UI.Toggles.InfiniteStaminaToggle.Value and true or false
-            if Variables.StaminaToggle then
-                Variables.ApplyStaminaPatch()
-            else
-                Variables.RevertStaminaPatch()
-            end
+            
+            Variables.Maids[ModuleName]:GiveTask(function() Variables.RunFlag = false end)
         end
 
         local function Stop()
-            Variables.StaminaToggle = false
-            Variables.RevertStaminaPatch()
-            maid:DoCleaning()
+            if not Variables.RunFlag and not Variables.StaminaApplied then return end
+            Variables.RunFlag = false
+            
+            pcall(function()
+                if not Variables.StaminaApplied then return end
+                local GC = getGC()
+                if GC and type(Variables.StaminaOriginalWaterLevel) == "number" then
+                    GC.WATER_LEVEL_TORSO = Variables.StaminaOriginalWaterLevel
+                end
+                Variables.StaminaApplied = false
+                notify("Infinite Stamina: [OFF].")
+            end)
+            
+            Variables.Maids[ModuleName]:DoCleaning()
+            Variables.StaminaOriginalWaterLevel = nil -- Clear backup
         end
 
-        return { Name = "InfiniteStamina", Stop = Stop }
+        -- [4] UI CREATION
+        local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Bypass", "shield-off")
+		local InfiniteStaminaToggle = RemovalGroupBox:AddToggle("InfiniteStaminaToggle", {
+			Text = "Infinite Stamina",
+			Tooltip = "Stay underwater indefinitely.", 
+			Default = false, 
+		})
+
+        -- [5] UI WIRING (CORRECTED)
+        UI.Toggles.InfiniteStaminaToggle:OnChanged(function(enabledState)
+            if enabledState then Start() else Stop() end
+        end)
+        
+        -- Start if already enabled
+        if UI.Toggles.InfiniteStaminaToggle.Value then
+            Start()
+        end
+
+        -- [6] RETURN MODULE
+        return { Name = ModuleName, Stop = Stop }
     end
 end
