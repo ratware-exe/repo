@@ -3,110 +3,136 @@ do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
 
-        local state = {
-            enabled = false,
-            speed = 60,
-            body_vel = nil,
-            body_gyro = nil,
-            base_part = nil,
-        }
+        local maid = Maid.new()
+        local running = false
+        local speedvalue = 250
 
-        local function get_hrp_or_seat()
+        local bodyvel, bodygyro, lastbase
+
+        local function get_camera()
+            return services.Workspace.CurrentCamera
+        end
+
+        local function get_basepart()
             local player = services.Players.LocalPlayer
-            local char = player and player.Character
-            if not char then return nil end
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            local character = player and player.Character
+            if not character then return nil end
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
             if humanoid and humanoid.SeatPart then
                 return humanoid.SeatPart
             end
-            return char:FindFirstChild("HumanoidRootPart")
+            return character:FindFirstChild("HumanoidRootPart")
         end
 
-        local function cleanup_flight()
-            if state.body_vel then pcall(function() state.body_vel:Destroy() end) end
-            if state.body_gyro then pcall(function() state.body_gyro:Destroy() end) end
-            state.body_vel, state.body_gyro, state.base_part = nil, nil, nil
+        local function ensure_forces()
+            local base = get_basepart()
+            if not base then return end
+            if base ~= lastbase then
+                if bodyvel then bodyvel:Destroy() bodyvel = nil end
+                if bodygyro then bodygyro:Destroy() bodygyro = nil end
+                lastbase = base
+            end
+            if not bodyvel then
+                bodyvel = Instance.new("BodyVelocity")
+                bodyvel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+                bodyvel.P = 25_000
+                bodyvel.Velocity = Vector3.zero
+                bodyvel.Parent = base
+                maid:GiveTask(bodyvel)
+            end
+            if not bodygyro then
+                bodygyro = Instance.new("BodyGyro")
+                bodygyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+                bodygyro.P = 25_000
+                bodygyro.CFrame = base.CFrame
+                bodygyro.Parent = base
+                maid:GiveTask(bodygyro)
+            end
+        end
+
+        local function input_direction()
+            local uis = services.UserInputService
+            local cam = get_camera()
+            if not cam then return Vector3.zero end
+
+            local look = cam.CFrame:VectorToWorldSpace(Vector3.new(0, 0, -1))
+            local right = cam.CFrame:VectorToWorldSpace(Vector3.new(1, 0, 0))
+            local dir = Vector3.zero
+
+            if uis:IsKeyDown(Enum.KeyCode.W) then dir += Vector3.new(look.X, 0, look.Z) end
+            if uis:IsKeyDown(Enum.KeyCode.S) then dir -= Vector3.new(look.X, 0, look.Z) end
+            if uis:IsKeyDown(Enum.KeyCode.A) then dir -= Vector3.new(right.X, 0, right.Z) end
+            if uis:IsKeyDown(Enum.KeyCode.D) then dir += Vector3.new(right.X, 0, right.Z) end
+            if uis:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
+            if uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.LeftShift) then
+                dir -= Vector3.new(0, 1, 0)
+            end
+
+            if dir.Magnitude > 0 then dir = dir.Unit end
+            return dir
         end
 
         local function start()
-            if state.enabled then return end
-            state.enabled = true
+            if running then return end
+            running = true
 
-            state.base_part = get_hrp_or_seat()
-            if not state.base_part then state.enabled = false; return end
+            ensure_forces()
 
-            state.body_vel = Instance.new("BodyVelocity")
-            state.body_vel.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-            state.body_vel.Velocity = Vector3.zero
-            state.body_vel.Parent = state.base_part
-
-            state.body_gyro = Instance.new("BodyGyro")
-            state.body_gyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
-            state.body_gyro.P = 2e4
-            state.body_gyro.CFrame = workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new()
-            state.body_gyro.Parent = state.base_part
-
-            local rs = services.RunService.RenderStepped:Connect(function(dt)
-                if not state.enabled then return end
-                local camera = workspace.CurrentCamera
-                local hrp = get_hrp_or_seat()
-                if not (camera and hrp and state.body_vel and state.body_gyro) then return end
-
-                -- WASD movement relative to camera
-                local move_dir = Vector3.zero
-                local uis = services.UserInputService
-                if uis:IsKeyDown(Enum.KeyCode.W) then move_dir += camera.CFrame.LookVector end
-                if uis:IsKeyDown(Enum.KeyCode.S) then move_dir -= camera.CFrame.LookVector end
-                if uis:IsKeyDown(Enum.KeyCode.A) then move_dir -= camera.CFrame.RightVector end
-                if uis:IsKeyDown(Enum.KeyCode.D) then move_dir += camera.CFrame.RightVector end
-                if uis:IsKeyDown(Enum.KeyCode.Space) then move_dir += Vector3.new(0,1,0) end
-                if uis:IsKeyDown(Enum.KeyCode.LeftControl) or uis:IsKeyDown(Enum.KeyCode.LeftShift) then
-                    move_dir -= Vector3.new(0,1,0)
+            local rs = services.RunService.RenderStepped:Connect(function()
+                if not running then return end
+                ensure_forces()
+                local base = lastbase
+                if not base then return end
+                local dir = input_direction()
+                local cam = get_camera()
+                if bodyvel then bodyvel.Velocity = dir * speedvalue end
+                if bodygyro and cam then
+                    bodygyro.CFrame = CFrame.new(base.Position, base.Position + cam.CFrame.LookVector)
                 end
-
-                if move_dir.Magnitude > 0 then move_dir = move_dir.Unit end
-                state.body_vel.Velocity = move_dir * state.speed
-                state.body_gyro.CFrame = CFrame.new(hrp.Position, hrp.Position + camera.CFrame.LookVector)
             end)
             maid:GiveTask(rs)
-            maid:GiveTask(function() state.enabled = false; cleanup_flight() end)
+            maid:GiveTask(function() running = false end)
         end
 
         local function stop()
-            if not state.enabled then return end
-            state.enabled = false
+            if not running then return end
+            running = false
             maid:DoCleaning()
-            cleanup_flight()
         end
 
-        -- UI (FlightToggle / FlightKeybind / FlightSlider)
-        local group = ui.Tabs.Main:AddLeftGroupbox("Movement", "rocket")
-        group:AddToggle("FlightToggle", {
-            Text = "Flight",
-            Tooltip = "Free-flight using camera direction.",
-            Default = false,
-        }):AddKeyPicker("FlightKeybind", { Text = "Flight Toggle", Default = "F", Mode = "Toggle", NoUI = true })
+        -- UI
+        local movement_tab = ui.Tabs.Main or ui.Tabs.Misc or ui.Tabs["Misc"]
+        local group = movement_tab:AddLeftGroupbox("Movement", "person-standing")
 
+        group:AddToggle("FlightToggle", {
+            Text = "Fly",
+            Tooltip = "Makes you fly.",
+            Default = false,
+        })
+        ui.Toggles.FlightToggle:AddKeyPicker("FlightKeybind", {
+            Text = "Fly",
+            SyncToggleState = true,
+            Mode = "Toggle",
+            NoUI = false,
+        })
         group:AddSlider("FlightSlider", {
-            Text = "Fly Speed",
-            Default = 60, Min = 10, Max = 250, Rounding = 0,
-            Tooltip = "Movement speed while flying.",
+            Text = "Flight Speed",
+            Default = 250, Min = 0, Max = 500, Rounding = 1, Compact = true,
+            Tooltip = "Changes flight speed.",
         })
 
-        ui.Toggles.FlightToggle:OnChanged(function(v)
-            if v then start() else stop() end
-        end)
-        if ui.Options.FlightSlider and ui.Options.FlightSlider.OnChanged then
-            ui.Options.FlightSlider:OnChanged(function(val)
-                local n = tonumber(val)
-                if n then state.speed = n end
+        if ui.Options.FlightSlider then
+            ui.Options.FlightSlider:OnChanged(function(v)
+                local n = tonumber(v)
+                if n then speedvalue = n end
             end)
+            speedvalue = tonumber(ui.Options.FlightSlider.Value) or speedvalue
         end
-        if ui.Options.FlightSlider and ui.Options.FlightSlider.Value ~= nil then
-            state.speed = tonumber(ui.Options.FlightSlider.Value) or state.speed
-        end
+
+        ui.Toggles.FlightToggle:OnChanged(function(enabled)
+            if enabled then start() else stop() end
+        end)
 
         return { Name = "Flight", Stop = stop }
     end
