@@ -1,4 +1,4 @@
--- modules/universal/teleport.lua
+-- modules/wfyb/teleport.lua
 do
     return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
@@ -198,9 +198,11 @@ do
         -- UI
         do
             local tab = UI.Tabs.Main or UI.Tabs.Misc
-            local group = tab:AddRightGroupbox("Teleport", "door-open")
+            
+            -- Renamed 'group' to 'CFrameGroup' for clarity
+            local CFrameGroup = tab:AddRightGroupbox("Teleport", "door-open")
 
-            group:AddInput("TeleportcFrame", {
+            CFrameGroup:AddInput("TeleportcFrame", {
                 Default = "Format: X, Y, Z",
                 Numeric = false,
                 Finished = false,
@@ -209,7 +211,7 @@ do
                 Tooltip = "Use the format [X, Y, Z]. Example: 0, 1000, 0",
                 Placeholder = "0, 0, 0",
             })
-            group:AddButton({
+            CFrameGroup:AddButton({
                 Text = "Teleport",
                 Func = function() Teleport_ApplyFromInputString() end,
                 DoubleClick = true,
@@ -218,8 +220,12 @@ do
                 Disabled = false,
             })
 
-            local tabbox = group:AddTabbox()
-            local playerTab = tabbox:AddTab("Player TP")
+            -- FIX: Add the Tabbox to the 'tab' object, not the 'group' object
+            -- A Tabbox cannot be inside a Groupbox.
+            -- I've added a title here for clarity, and used AddRightTabbox to match the groupbox.
+            local PlayerBoatTabbox = tab:AddRightTabbox("Player/Boat TP")
+            
+            local playerTab = PlayerBoatTabbox:AddTab("Player TP")
             playerTab:AddDropdown("PlayerTPDropdown", {
                 SpecialType = "Player",
                 ExcludeLocalPlayer = true,
@@ -245,7 +251,7 @@ do
                 Disabled = false,
             })
 
-            local boatTab = tabbox:AddTab("Boat TP")
+            local boatTab = PlayerBoatTabbox:AddTab("Boat TP")
             boatTab:AddDropdown("UniversalBoatDropdown", {
                 Values = Variables.UniversalBoatList,
                 Text = "Search or Select Boat:",
