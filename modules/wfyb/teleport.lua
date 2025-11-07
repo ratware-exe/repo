@@ -1,156 +1,294 @@
 -- modules/universal/teleport.lua
 do
-    return function(ui)
+    return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        local maid     = Maid.new()
 
-        local maid = Maid.new()
-        local input_string = "0, 0, 0"
-        local selected_player_name = ""
-        local selected_boat_label = "" -- label from UniversalBoatDropdown values
+        local Variables = {
+            TeleportCFrameInputString = "0, 0, 0",
+            BoatTPSelectedDisplay = "",
+            BoatTPSelectedModelName = "",
+            UniversalBoatList = {},  -- values filled live
+        }
 
-        local function local_root()
-            local player = services.Players.LocalPlayer
-            local character = player and player.Character
-            return character and character:FindFirstChild("HumanoidRootPart")
+        -- Utilities used verbatim by boat tp section
+        local function GetBoatsFolder()
+            return services.Workspace:FindFirstChild("Boats")
         end
-
-        local function parse_xyz(text)
-            local x, y, z = string.match(tostring(text), "(-?%d+%.?%d*)%s*,%s*(-?%d+%.?%d*)%s*,%s*(-?%d+%.?%d*)")
-            x, y, z = tonumber(x), tonumber(y), tonumber(z)
-            if x and y and z then return Vector3.new(x, y, z) end
-            return nil
-        end
-
-        local function tp_to_cframe()
-            local v = parse_xyz(input_string)
-            local root = local_root()
-            if root and v then
-                root.CFrame = CFrame.new(v)
-            end
-        end
-
-        local function tp_to_player()
-            if not selected_player_name or selected_player_name == "" then return end
-            local target = services.Players:FindFirstChild(selected_player_name)
-            local tchar = target and target.Character
-            local troot = tchar and tchar:FindFirstChild("HumanoidRootPart")
-            local root  = local_root()
-            if root and troot then
-                root.CFrame = troot.CFrame + Vector3.new(0, 5, 0)
-            end
-        end
-
-        local function is_boat_model(inst)
-            if not (typeof(inst) == "Instance" and inst:IsA("Model")) then return false end
-            if inst:FindFirstChild("BoatData") then return true end
-            if string.find(string.lower(inst.Name), "boat") then return true end
-            return false
-        end
-
-        local function boat_label_for_model(m)
-            local data = m:FindFirstChild("BoatData")
-            local owner = nil
-            local name  = nil
-            if data then
-                local o = data:FindFirstChild("Owner")
-                local n = data:FindFirstChild("UnfilteredBoatName")
-                if o and o:IsA("ObjectValue") and o.Value and o.Value.Name then owner = o.Value.Name end
-                if n and n:IsA("StringValue") then name = n.Value end
-            end
-            local pieces = {}
-            if name then table.insert(pieces, tostring(name)) end
-            if owner then table.insert(pieces, "(" .. tostring(owner) .. ")") end
-            return #pieces > 0 and table.concat(pieces, " ") or m.Name
-        end
-
-        local function find_boat_by_label(label)
-            local boats = services.Workspace:FindFirstChild("Boats")
-            if not boats then return nil end
-            for _, m in ipairs(boats:GetChildren()) do
-                if is_boat_model(m) then
-                    if boat_label_for_model(m) == label then
-                        return m
-                    end
+        local function GetAnyBasePartFromModel(model)
+            local pp = model.PrimaryPart
+            if pp and pp:IsA("BasePart") then return pp end
+            local ok, parts = pcall(function() return model:GetDescendants() end)
+            if ok and parts then
+                for _, d in ipairs(parts) do
+                    if d:IsA("BasePart") then return d end
                 end
             end
             return nil
         end
-
-        local function tp_to_boat()
-            if not selected_boat_label or selected_boat_label == "" then return end
-            local m = find_boat_by_label(selected_boat_label)
-            local root = local_root()
-            if not (m and root) then return end
-            local pivot = nil
-            pcall(function() pivot = m:GetPivot() end)
-            if not pivot then
-                local primary = m.PrimaryPart
-                pivot = primary and primary.CFrame or nil
+        local function ResolveOwnerDisplayName(ownerValueObject)
+            if not ownerValueObject then return nil end
+            local v = ownerValueObject.Value
+            if typeof(v) == "Instance" and v:IsA("Player") then
+                return v.DisplayName or v.Name
             end
-            if pivot then
-                root.CFrame = pivot + Vector3.new(0, 8, 0)
+            return nil
+        end
+        local function ParseDropdownDisplay(displayString)
+            -- Supports: "owner • BoatName • ModelName"  OR "ModelName"
+            displayString = tostring(displayString or "")
+            local owner, boat, model = string.match(displayString, "^([^•]+)%s*•%s*([^•]+)%s*•%s*(.+)$")
+            if owner and boat and model then
+                owner = string.gsub(owner, "^%s*(.-)%s*$", "%1")
+                boat  = string.gsub(boat,  "^%s*(.-)%s*$", "%1")
+                model = string.gsub(model, "^%s*(.-)%s*$", "%1")
+                return owner, boat, model
+            else
+                model = string.gsub(displayString, "^%s*(.-)%s*$", "%1")
+                return nil, nil, model
+            end
+        end
+        local function FindTargetBoatModel(boatsFolder, targetOwnerName, targetBoatName, targetModelName)
+            if not boatsFolder then return nil end
+            local lp = services.Players.LocalPlayer
+            local ch = lp and lp.Character
+            local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+
+            local closestModel, closestDistance = nil, nil
+            for _, model in ipairs(boatsFolder:GetDescendants()) do
+                if model:IsA("Model") then
+                    local boatData = model:FindFirstChild("BoatData") or model:FindFirstChild("BoatData", true)
+                    if boatData then
+                        local ownerVO = boatData:FindFirstChild("Owner")
+                        local nameVO  = boatData:FindFirstChild("UnfilteredBoatName")
+                        local ownerMatches = true
+                        local nameMatches = true
+
+                        if targetOwnerName and targetOwnerName ~= "" then
+                            ownerMatches = (ResolveOwnerDisplayName(ownerVO) == targetOwnerName)
+                        end
+                        if targetBoatName and targetBoatName ~= "" then
+                            nameMatches = (nameVO and tostring(nameVO.Value) == targetBoatName)
+                        end
+
+                        local modelMatches = (not targetModelName or targetModelName == "" or model.Name == targetModelName)
+
+                        if ownerMatches and nameMatches and modelMatches then
+                            if not hrp then
+                                return model
+                            end
+                            local pivotOk, pivot = pcall(model.GetPivot, model)
+                            local pos = pivotOk and pivot and pivot.Position or (GetAnyBasePartFromModel(model) and GetAnyBasePartFromModel(model).Position)
+                            if pos then
+                                local dist = (pos - hrp.Position).Magnitude
+                                if not closestDistance or dist < closestDistance then
+                                    closestModel = model
+                                    closestDistance = dist
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            return closestModel
+        end
+
+        -- CFrame TP (verbatim)
+        local function Teleport_ApplyFromInputString()
+            local txt = tostring(Variables.TeleportCFrameInputString or "")
+            local xs, ys, zs = string.match(txt, "^%s*([%-%.%d]+)%s*,%s*([%-%.%d]+)%s*,%s*([%-%.%d]+)%s*$")
+            if not (xs and ys and zs) then
+                if Variables.notify then Variables.notify("Teleport: invalid format. Use: X, Y, Z") end
+                return
+            end
+            local x = tonumber(xs); local y = tonumber(ys); local z = tonumber(zs)
+            if not (x and y and z) then
+                if Variables.notify then Variables.notify("Teleport: could not parse numbers.") end
+                return
+            end
+            local lp = services.Players.LocalPlayer
+            local ch = lp and lp.Character
+            if not ch then
+                if Variables.notify then Variables.notify("Teleport: character not ready.") end
+                return
+            end
+            local hrp = ch:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                if Variables.notify then Variables.notify("Teleport: HumanoidRootPart not found.") end
+                return
+            end
+            hrp.CFrame = CFrame.new(x, y, z)
+        end
+
+        local function ExecuteBoatTeleport()
+            local lp  = services.Players.LocalPlayer
+            local ch  = lp and lp.Character
+            local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                if Variables.notify then Variables.notify("Boat TP: Character not ready.") end
+                return
+            end
+
+            local selectedDisplayString = Variables.BoatTPSelectedDisplay
+            if UI.Options and UI.Options.UniversalBoatDropdown then
+                selectedDisplayString = tostring(UI.Options.UniversalBoatDropdown.Value or selectedDisplayString)
+            end
+            Variables.BoatTPSelectedDisplay = selectedDisplayString
+
+            local ownerName, boatName, modelName = ParseDropdownDisplay(selectedDisplayString)
+            Variables.BoatTPSelectedModelName = modelName or ""
+
+            if (not ownerName and not modelName) or (modelName == "" and (not boatName or boatName == "")) then
+                if Variables.notify then Variables.notify("Boat TP: Please select a boat.") end
+                return
+            end
+
+            local boatsFolder = GetBoatsFolder()
+            if not boatsFolder then
+                if Variables.notify then Variables.notify("Boat TP: Boats folder not set.") end
+                return
+            end
+
+            local targetBoatModel = FindTargetBoatModel(boatsFolder, ownerName, boatName, modelName)
+            if not targetBoatModel then
+                if Variables.notify then Variables.notify("Boat TP: Target boat not found.") end
+                return
+            end
+
+            local targetCFrame
+            local gotPivot, boatPivot = pcall(targetBoatModel.GetPivot, targetBoatModel)
+            if gotPivot and boatPivot then
+                targetCFrame = boatPivot
+            else
+                local basePart = GetAnyBasePartFromModel(targetBoatModel)
+                targetCFrame = basePart and basePart.CFrame or nil
+            end
+
+            if not targetCFrame then
+                if Variables.notify then Variables.notify("Boat TP: Could not resolve boat position.") end
+                return
+            end
+
+            hrp.CFrame = targetCFrame
+            if Variables.notify then Variables.notify("Teleported to boat: " .. (targetBoatModel.Name or "?")) end
+        end
+
+        -- build/refresh boat dropdown values (simple: model names)
+        local function RebuildUniversalBoatList()
+            local list = {}
+            local boatsFolder = GetBoatsFolder()
+            if boatsFolder then
+                for _, model in ipairs(boatsFolder:GetChildren()) do
+                    if model:IsA("Model") then
+                        table.insert(list, model.Name)
+                    end
+                end
+            end
+            Variables.UniversalBoatList = list
+            if UI.Options and UI.Options.UniversalBoatDropdown then
+                if UI.Options.UniversalBoatDropdown.SetValues then
+                    UI.Options.UniversalBoatDropdown:SetValues(list)
+                else
+                    UI.Options.UniversalBoatDropdown.Values = list
+                end
             end
         end
 
         -- UI
-        local right = (ui.Tabs.Main or ui.Tabs.Misc):AddRightGroupbox("Teleport", "door-open")
-        right:AddInput("TeleportcFrame", {
-            Default = "Format: X, Y, Z",
-            Numeric = false, Finished = false, ClearTextOnFocus = true,
-            Text = "Input cFrame Coordinates:", Placeholder = "0, 0, 0",
-            Tooltip = "Use the format [X, Y, Z]. Example: 0, 1000, 0",
-        })
-        local go_btn = right:AddButton({ Text = "Teleport", Func = function() end, DoubleClick = true,
-            Tooltip = "Click to teleport to the inputted cFrame coordinates.", Disabled = false })
+        do
+            local tab = UI.Tabs.Main or UI.Tabs.Misc
+            local group = tab:AddRightGroupbox("Teleport", "door-open")
 
-        local tbox = (ui.Tabs.Main or ui.Tabs.Misc):AddRightTabbox()
-        local ptab = tbox:AddTab("Player TP")
-        ptab:AddDropdown("PlayerTPDropdown", {
-            SpecialType = "Player", ExcludeLocalPlayer = true, Text = "Select Player:",
-            Tooltip = "Select player to tp to.",
-        })
-        local ptp = ptab:AddButton({ Text = "Teleport To Player", Func = function() end, DoubleClick = true })
+            group:AddInput("TeleportcFrame", {
+                Default = "Format: X, Y, Z",
+                Numeric = false,
+                Finished = false,
+                ClearTextOnFocus = true,
+                Text = "Input cFrame Coordinates:",
+                Tooltip = "Use the format [X, Y, Z]. Example: 0, 1000, 0",
+                Placeholder = "0, 0, 0",
+            })
+            group:AddButton({
+                Text = "Teleport",
+                Func = function() Teleport_ApplyFromInputString() end,
+                DoubleClick = true,
+                Tooltip = "Double click to teleport to the inputted cFrame coordinates.",
+                DisabledTooltip = "Feature Disabled",
+                Disabled = false,
+            })
 
-        local btab = tbox:AddTab("Boat TP")
-        btab:AddDropdown("UniversalBoatDropdown", {
-            Values = {}, Text = "Search or Select Boat:", Multi = false, Searchable = true,
-            Tooltip = "Click on target & close dropdown to confirm selection.", Disabled = false, Visible = true,
-        })
-        local btp = btab:AddButton({ Text = "Teleport To Boat", Func = function() end, DoubleClick = true })
+            local tabbox = group:AddTabbox()
+            local playerTab = tabbox:AddTab("Player TP")
+            playerTab:AddDropdown("PlayerTPDropdown", {
+                SpecialType = "Player",
+                ExcludeLocalPlayer = true,
+                Text = "Select Player:",
+                Tooltip = "Click player & close dropdown to confirm selection.",
+            })
+            playerTab:AddButton({
+                Text = "Teleport To Player",
+                Func = function()
+                    local target = UI.Options and UI.Options.PlayerTPDropdown and UI.Options.PlayerTPDropdown.Value
+                    if typeof(target) == "Instance" and target:IsA("Player") then
+                        local lp = services.Players.LocalPlayer
+                        local ch = lp and lp.Character
+                        local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+                        local tch = target.Character
+                        local thrp = tch and tch:FindFirstChild("HumanoidRootPart")
+                        if hrp and thrp then hrp.CFrame = thrp.CFrame end
+                    end
+                end,
+                DoubleClick = true,
+                Tooltip = "Double click to teleport to player.",
+                DisabledTooltip = "Feature Disabled",
+                Disabled = false,
+            })
 
-        -- Wiring
-        if ui.Options.TeleportcFrame then
-            ui.Options.TeleportcFrame:OnChanged(function(value)
-                input_string = tostring(value or "")
+            local boatTab = tabbox:AddTab("Boat TP")
+            boatTab:AddDropdown("UniversalBoatDropdown", {
+                Values = Variables.UniversalBoatList,
+                Text = "Search or Select Boat:",
+                Multi = false,
+                Tooltip = "Click on target & close dropdown to confirm selection.",
+                DisabledTooltip = "Feature Disabled!",
+                Searchable = true,
+                Disabled = false,
+                Visible = true,
+            })
+            boatTab:AddButton({
+                Text = "Teleport To Boat",
+                Func = ExecuteBoatTeleport,
+                DoubleClick = true,
+                Tooltip = "Double click to teleport to boat.",
+                DisabledTooltip = "Feature Disabled",
+                Disabled = false,
+            })
+        end
+
+        -- hook UI (input change)
+        if UI.Options and UI.Options.TeleportcFrame and UI.Options.TeleportcFrame.OnChanged then
+            UI.Options.TeleportcFrame:OnChanged(function(text)
+                Variables.TeleportCFrameInputString = tostring(text or "")
             end)
         end
-        if go_btn then
-            if go_btn.SetCallback then go_btn:SetCallback(tp_to_cframe) else go_btn.Func = tp_to_cframe end
+
+        -- refresh boat list periodically
+        local refreshConn = services.RunService.Heartbeat:Connect(function(step)
+            -- very light once per ~2s
+            if not Variables._acc then Variables._acc = 0 end
+            Variables._acc = Variables._acc + step
+            if Variables._acc >= 2 then
+                Variables._acc = 0
+                RebuildUniversalBoatList()
+            end
+        end)
+        maid:GiveTask(refreshConn)
+
+        local function Stop()
+            maid:DoCleaning()
         end
 
-        if ui.Options.PlayerTPDropdown then
-            ui.Options.PlayerTPDropdown:OnChanged(function(v)
-                if typeof(v) == "Instance" and v:IsA("Player") then
-                    selected_player_name = v.Name
-                elseif type(v) == "string" then
-                    selected_player_name = v
-                end
-            end)
-        end
-        if ptp then
-            if ptp.SetCallback then ptp:SetCallback(tp_to_player) else ptp.Func = tp_to_player end
-        end
-
-        if ui.Options.UniversalBoatDropdown then
-            ui.Options.UniversalBoatDropdown:OnChanged(function(v)
-                if type(v) == "string" then selected_boat_label = v end
-            end)
-        end
-        if btp then
-            if btp.SetCallback then btp:SetCallback(tp_to_boat) else btp.Func = tp_to_boat end
-        end
-
-        return { Name = "Teleport", Stop = function() maid:DoCleaning() end }
+        return { Name = "Teleport", Stop = Stop }
     end
 end
