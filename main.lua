@@ -13,24 +13,27 @@ do
 
 local featurePaths = {
     "dependency/UIRegistry.lua",
-    "modules/universal/errorsuppressor.lua",
-    -- Movement 
+    "modules/universal/debug/errorsuppressor.lua",
+    "modules/wfyb/acbypass/sightoverseer.lua",
+    "modules/wfyb/acbypass/lighting.lua",
+    -- Movement / Bypass / Teleport / Vehicle tools
     "modules/universal/movement/speedhack.lua",
     "modules/universal/movement/fly.lua",
     "modules/universal/movement/noclip.lua",
-        
     "modules/wfyb/infinitestamina.lua",
-    "modules/universal/attachtoback.lua",
-    "modules/wfyb/teleport.lua",
-    "modules/wfyb/customgyroscope.lua",
+    "modules/universal/rage/attachtoback.lua",
+    "modules/universal/travel/teleportcframe.lua",
+    "modules/wfyb/teleportplayer.lua",
+    "modules/wfyb/teleportboat.lua",
+    "modules/wfyb/gyroscope.lua",
     
     -- ESP & Visuals
-    "modules/wfyb/playeresp.lua",
-    "modules/wfyb/proximityarrows.lua",
+    "modules/backup/playeresp.lua",
+    "modules/backup/proximityarrows.lua",
     "modules/wfyb/boatesp.lua",
-    "modules/universal/fullbright.lua",
-    "modules/universal/nosky.lua",
-    "modules/universal/nofog.lua",
+    "modules/universal/visual/fullbright.lua",
+    "modules/universal/visual/nosky.lua",
+    "modules/universal/visual/nofog.lua",
         
     -- your existing WFYB-specific and universal modules:
     "modules/wfyb/shield.lua",
@@ -42,13 +45,13 @@ local featurePaths = {
     "modules/wfyb/blockpopup.lua",
     "modules/wfyb/transfermoney.lua",
     "modules/wfyb/crashserver.lua",
-    "modules/universal/playeresp.lua",
+    "modules/universal/visual/playeresp.lua",
     "modules/wfyb/vipservercommands.lua",
-    "modules/universal/infinitezoom.lua",
-    "modules/universal/antiafk.lua",
-    "modules/universal/optimization.lua",
-    "modules/universal/clientnamespoofer.lua",
-    "modules/universal/debugtools.lua",
+    "modules/universal/miscellaneous/infinitezoom.lua",
+    "modules/universal/miscellaneous/antiafk.lua",
+    "modules/universal/miscellaneous/optimization.lua",
+    "modules/universal/miscellaneous/clientnamespoofer.lua",
+    "modules/universal/debug/debugtools.lua",
 }
 
     for i = 1, #featurePaths do
