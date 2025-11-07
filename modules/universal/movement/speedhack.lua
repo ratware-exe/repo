@@ -161,7 +161,6 @@ do
         
         -- [5] UI WIRING
         UI.Toggles.SpeedhackToggle:OnChanged(function(enabledState)
-            Variables.RunFlag = enabledState
             if enabledState then 
                 task.wait(math.random(Variables.WaitRandomMin, Variables.WaitRandomMax)) -- From original script
                 Start() 
