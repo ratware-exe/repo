@@ -1,4 +1,4 @@
--- modules/wfyb/teleport_boat.lua
+-- "modules/wfyb/teleportboat.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
