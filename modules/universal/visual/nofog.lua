@@ -1,4 +1,4 @@
--- modules/universal/nofog.lua
+-- modules/universal/visual/nofog.lua
 do
     return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
