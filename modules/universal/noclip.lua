@@ -3,51 +3,58 @@ do
     return function(ui)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-        local maid     = Maid.new()
 
-        local state = { enabled = false }
+        local maid = Maid.new()
+        local running = false
+        local original = setmetatable({}, { __mode = "k" })
 
-        local function set_collide(character, can_collide)
+        local function set_noclip(state)
+            local player = services.Players.LocalPlayer
+            local character = player and player.Character
             if not character then return end
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    pcall(function() part.CanCollide = can_collide end)
+            for _, inst in ipairs(character:GetDescendants()) do
+                if inst:IsA("BasePart") and inst.CanCollide ~= not state then
+                    if original[inst] == nil then original[inst] = inst.CanCollide end
+                    inst.CanCollide = not state
                 end
             end
         end
 
-        local function get_character()
-            local player = services.Players.LocalPlayer
-            return player and player.Character
+        local function restore()
+            for part, can in pairs(original) do
+                if part then pcall(function() part.CanCollide = can end) end
+                original[part] = nil
+            end
         end
 
         local function start()
-            if state.enabled then return end
-            state.enabled = true
+            if running then return end
+            running = true
             local stepped = services.RunService.Stepped:Connect(function()
-                if not state.enabled then return end
-                set_collide(get_character(), false)
+                if not running then return end
+                set_noclip(true)
             end)
             maid:GiveTask(stepped)
-            maid:GiveTask(function() state.enabled = false end)
+            maid:GiveTask(function() running = false end)
         end
 
         local function stop()
-            if not state.enabled then return end
-            state.enabled = false
+            if not running then return end
+            running = false
             maid:DoCleaning()
-            set_collide(get_character(), true)
+            restore()
         end
 
-        local group = ui.Tabs.Main:AddLeftGroupbox("Movement", "scan-line")
+        -- UI
+        local movement_tab = ui.Tabs.Main or ui.Tabs.Misc
+        local group = movement_tab:AddLeftGroupbox("Movement", "person-standing")
         group:AddToggle("NoclipToggle", {
             Text = "No Clip",
-            Tooltip = "Disable collisions on your character.",
+            Tooltip = "Makes you go through objects.",
             Default = false,
-        }):AddKeyPicker("NoclipKeybind", { Text = "No Clip Toggle", Default = "N", Mode = "Toggle", NoUI = true })
-
-        ui.Toggles.NoclipToggle:OnChanged(function(v)
-            if v then start() else stop() end
+        })
+        ui.Toggles.NoclipToggle:OnChanged(function(enabled)
+            if enabled then start() else stop() end
         end)
 
         return { Name = "NoClip", Stop = stop }
