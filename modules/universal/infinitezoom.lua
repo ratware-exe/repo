@@ -7,19 +7,18 @@ do
         local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
         local Variables = {
-            Maids = { InfZoom = Maid.new() },
+            Maids = { InfiniteZoom = Maid.new() },
             RunFlag = false,
             Backup = nil,
+            HugeZoomDistance = 1e8
         }
-
-        local HugeZoomDistance = 1e8
 
         local function Start()
             if Variables.RunFlag then return end
             Variables.RunFlag = true
 
-            local localPlayer = RbxService.Players.LocalPlayer
-            if not localPlayer then
+            local LocalPlayer = RbxService.Players.LocalPlayer
+            if not LocalPlayer then
                 Variables.RunFlag = false
                 return
             end
@@ -27,30 +26,30 @@ do
             if not Variables.Backup then
                 pcall(function()
                     Variables.Backup = {
-                        Max = localPlayer.CameraMaxZoomDistance,
-                        Min = localPlayer.CameraMinZoomDistance,
+                        Max = LocalPlayer.CameraMaxZoomDistance,
+                        Min = LocalPlayer.CameraMinZoomDistance,
                     }
                 end)
             end
 
             pcall(function()
-                localPlayer.CameraMaxZoomDistance = HugeZoomDistance
-                localPlayer.CameraMinZoomDistance = 0
+                LocalPlayer.CameraMaxZoomDistance = Variables.HugeZoomDistance
+                LocalPlayer.CameraMinZoomDistance = 0
             end)
 
             local enforceConnection = RbxService.RunService.RenderStepped:Connect(function()
                 if not Variables.RunFlag then return end
-                local currentLocalPlayer = RbxService.Players.LocalPlayer
-                if currentLocalPlayer then
+                local CurrentLocalPlayer = RbxService.Players.LocalPlayer
+                if CurrentLocalPlayer then
                     pcall(function()
-                        currentLocalPlayer.CameraMaxZoomDistance = HugeZoomDistance
-                        currentLocalPlayer.CameraMinZoomDistance = 0
+                        CurrentLocalPlayer.CameraMaxZoomDistance = Variables.HugeZoomDistance
+                        CurrentLocalPlayer.CameraMinZoomDistance = 0
                     end)
                 end
             end)
 
-            Variables.Maids.InfZoom:GiveTask(enforceConnection)
-            Variables.Maids.InfZoom:GiveTask(function() Variables.RunFlag = false end)
+            Variables.Maids.InfiniteZoom:GiveTask(enforceConnection)
+            Variables.Maids.InfiniteZoom:GiveTask(function() Variables.RunFlag = false end)
         end
 
         local function Stop()
@@ -58,27 +57,27 @@ do
             Variables.RunFlag = false
             Variables.Maids.InfZoom:DoCleaning()
 
-            local localPlayer = RbxService.Players.LocalPlayer
-            if localPlayer and Variables.Backup then
+            local LocalPlayer = RbxService.Players.LocalPlayer
+            if LocalPlayer and Variables.Backup then
                 pcall(function()
-                    localPlayer.CameraMaxZoomDistance = Variables.Backup.Max or 400
-                    localPlayer.CameraMinZoomDistance = Variables.Backup.Min or 0.5
+                    LocalPlayer.CameraMaxZoomDistance = Variables.Backup.Max or 400
+                    LocalPlayer.CameraMinZoomDistance = Variables.Backup.Min or 0.5
                 end)
                 Variables.Backup = nil
             end
         end
 
         -- UI
-        local cameramodgroupbox = UI.Tabs.Misc:AddLeftGroupbox("Inf Zoom", "mouse-pointer-2")
-        cameramodgroupbox:AddToggle("InfZoomToggle", {
+        local CameraGroupbox = UI.Tabs.Misc:AddLeftGroupbox("Infinite Zoom", "mouse-pointer-2")
+        cameramodgroupbox:AddToggle("InfiniteZoomToggle", {
             Text = "Infinite Zoom",
             Tooltip = "Allows you to zoom out infinitely.",
             Default = false,
         })
-        UI.Toggles.InfZoomToggle:OnChanged(function(enabledState)
+        UI.Toggles.InfiniteZoomToggle:OnChanged(function(enabledState)
             if enabledState then Start() else Stop() end
         end)
 
-        return { Name = "InfZoom", Stop = Stop }
+        return { Name = "InfiniteZoom", Stop = Stop }
     end
 end
