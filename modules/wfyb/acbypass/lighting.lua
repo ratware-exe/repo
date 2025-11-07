@@ -1,4 +1,4 @@
--- modules/acbypasslighting.lua
+-- "modules/wfyb/acbypass/lighting.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
