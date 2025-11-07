@@ -1,4 +1,4 @@
--- modules/universal/movement/speedhack.lua
+-- "modules/universal/movement/speedhack.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
