@@ -1,4 +1,4 @@
--- modules/universal/fullbright.lua
+-- modules/universal/visual/fullbright.lua
 do
     return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
