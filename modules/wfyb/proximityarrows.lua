@@ -1,134 +1,165 @@
 -- modules/universal/proximityarrows.lua
 do
-    return function(ui)
+    return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+        local maid     = Maid.new()
 
-        local maid = Maid.new()
-        local arrows_by_player = {}
-        local circle
-        local render_conn
+        local Variables = {
+            ProximityArrows = "ProximityArrowsToggle",
+            ProximityRange  = "ProximityDistanceSlider",
 
-        local arrow_size = 28
-        local arrow_radius = 240
-        local arrow_thickness = 1
-        local circle_sides = 64
-        local circle_color = Color3.fromRGB(255, 255, 255)
+            RadarCircleThickness = 2,
+            RadarCircleNumSides  = 64,
+            ArrowRadius          = 160,
+            ArrowColor           = Color3.fromRGB(255, 255, 255),
 
-        local function ensure_circle()
-            if circle then return end
-            circle = Drawing.new("Circle")
-            circle.Thickness = 1
-            circle.NumSides = circle_sides
-            circle.Radius = arrow_radius
-            circle.Color = circle_color
-            circle.Filled = false
-            circle.Visible = false
-            maid:GiveTask(function() if circle then circle:Remove() end end)
+            ArrowShape = { size = 18 }, -- head width in original calc
+            PA_arrows = {},
+        }
+
+        local function drawArrow(tip, angle, size)
+            local arrow = Drawing.new("Triangle")
+            local base1 = Vector2.new(
+                tip.X + math.cos(angle + math.pi * 0.75) * size,
+                tip.Y + math.sin(angle + math.pi * 0.75) * size
+            )
+            local base2 = Vector2.new(
+                tip.X + math.cos(angle - math.pi * 0.75) * size,
+                tip.Y + math.sin(angle - math.pi * 0.75) * size
+            )
+
+            arrow.PointA = tip
+            arrow.PointB = base1
+            arrow.PointC = base2
+            arrow.Visible = true
+            return arrow
         end
 
-        local function ensure_arrow(plr)
-            if plr == services.Players.LocalPlayer then return end
-            if arrows_by_player[plr] then return end
-            local tri = Drawing.new("Triangle")
-            tri.Filled = true
-            tri.Thickness = arrow_thickness
-            tri.Color = Color3.fromRGB(255, 255, 255)
-            tri.Visible = false
-            arrows_by_player[plr] = tri
-            maid:GiveTask(function() if arrows_by_player[plr] then arrows_by_player[plr]:Remove(); arrows_by_player[plr]=nil end end)
+        Variables.PA_radarCircle = (function()
+            local circ = Drawing.new("Circle")
+            circ.Thickness = Variables.RadarCircleThickness
+            circ.NumSides = Variables.RadarCircleNumSides
+            circ.Radius = Variables.ArrowRadius
+            circ.Color = Variables.ArrowColor
+            circ.Filled = false
+            circ.Visible = false
+            return circ
+        end)()
+
+        local function ensureArrow(player)
+            local lp = services.Players.LocalPlayer
+            if player ~= lp and not Variables.PA_arrows[player] then
+                Variables.PA_arrows[player] = Drawing.new("Triangle")
+                Variables.PA_arrows[player].Visible = false
+            end
+        end
+        local function removeArrow(player)
+            if Variables.PA_arrows[player] then
+                Variables.PA_arrows[player]:Remove()
+                Variables.PA_arrows[player] = nil
+            end
         end
 
-        local function remove_arrow(plr)
-            if arrows_by_player[plr] then arrows_by_player[plr]:Remove(); arrows_by_player[plr] = nil end
-        end
+        maid:GiveTask(services.Players.PlayerAdded:Connect(ensureArrow))
+        maid:GiveTask(services.Players.PlayerRemoving:Connect(removeArrow))
+        for _, plr in ipairs(services.Players:GetPlayers()) do ensureArrow(plr) end
 
-        local function render()
-            local cam = services.Workspace.CurrentCamera
-            if not cam then return end
-            local vp = cam.ViewportSize
-            local center = Vector2.new(vp.X/2, vp.Y/2)
-
-            if ui.Toggles.ProximityCircleToggle and ui.Toggles.ProximityCircleToggle.Value then
-                ensure_circle()
-                circle.Position = center
-                circle.Visible = true
-            elseif circle then
-                circle.Visible = false
+        local function renderArrows()
+            local t = UI.Toggles and UI.Toggles[Variables.ProximityArrows]
+            if not (t and t.Value) then
+                Variables.PA_radarCircle.Visible = false
+                for _, arrow in pairs(Variables.PA_arrows) do arrow.Visible = false end
+                return
             end
 
-            local max_dist = (ui.Options.ProximityDistanceSlider and tonumber(ui.Options.ProximityDistanceSlider.Value)) or 250
+            local camera = services.Workspace.CurrentCamera
+            local anyVisible = false
+            local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+            local maxDist = (UI.Options and UI.Options[Variables.ProximityRange] and UI.Options[Variables.ProximityRange].Value) or 8000
 
-            for _, plr in ipairs(services.Players:GetPlayers()) do
-                if plr ~= services.Players.LocalPlayer then
-                    ensure_arrow(plr)
-                    local tri = arrows_by_player[plr]
-                    local char = plr.Character
-                    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-                    local lchar = services.Players.LocalPlayer.Character
-                    local lhrp = lchar and lchar:FindFirstChild("HumanoidRootPart")
+            for player, arrow in pairs(Variables.PA_arrows) do
+                local char = player.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local dist = (hrp.Position - camera.CFrame.Position).Magnitude
+                    if dist <= maxDist then
+                        local _, onScreen = camera:WorldToViewportPoint(hrp.Position)
+                        if not onScreen then
+                            anyVisible = true
 
-                    if not (tri and hrp and lhrp) then
-                        if tri then tri.Visible = false end
-                    else
-                        local offset = hrp.Position - lhrp.Position
-                        local dist = offset.Magnitude
-                        local screenpos, on_screen = cam:WorldToViewportPoint(hrp.Position)
-                        if on_screen or dist > max_dist then
-                            tri.Visible = false
+                            local lp = services.Players.LocalPlayer
+                            local myhrp = lp and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+                            if myhrp then
+                                local lpPos = myhrp.Position
+                                local targetPos = hrp.Position
+                                local dir = Vector2.new(targetPos.X - lpPos.X, targetPos.Z - lpPos.Z)
+
+                                local worldAngle = math.atan2(dir.Y, dir.X)
+                                local camYaw = math.atan2(camera.CFrame.LookVector.Z, camera.CFrame.LookVector.X)
+                                local relAngle = worldAngle - camYaw - math.pi/2
+
+                                local ratio = math.clamp(dist / maxDist, 0, 1)
+                                local color = Color3.fromRGB(
+                                    math.floor(255 - 255 * ratio),
+                                    math.floor(255 * ratio),
+                                    0
+                                )
+
+                                local radius = Variables.ArrowRadius
+                                local tip = Vector2.new(
+                                    screenCenter.X + math.cos(relAngle) * radius,
+                                    screenCenter.Y + math.sin(relAngle) * radius
+                                )
+
+                                arrow.PointA = tip
+                                arrow.PointB = Vector2.new(
+                                    tip.X + math.cos(relAngle + math.pi * 0.75) * Variables.ArrowShape.size,
+                                    tip.Y + math.sin(relAngle + math.pi * 0.75) * Variables.ArrowShape.size
+                                )
+                                arrow.PointC = Vector2.new(
+                                    tip.X + math.cos(relAngle - math.pi * 0.75) * Variables.ArrowShape.size,
+                                    tip.Y + math.sin(relAngle - math.pi * 0.75) * Variables.ArrowShape.size
+                                )
+                                arrow.Color = color
+                                arrow.Visible = true
+                            end
                         else
-                            -- angle in screen space from center toward player projected position
-                            local angle = math.atan2(screenpos.Y - center.Y, screenpos.X - center.X)
-                            local tip = Vector2.new(
-                                center.X + math.cos(angle) * (arrow_radius + arrow_size),
-                                center.Y + math.sin(angle) * (arrow_radius + arrow_size)
-                            )
-                            local base1 = Vector2.new(
-                                tip.X + math.cos(angle + math.pi * 0.75) * arrow_size,
-                                tip.Y + math.sin(angle + math.pi * 0.75) * arrow_size
-                            )
-                            local base2 = Vector2.new(
-                                tip.X + math.cos(angle - math.pi * 0.75) * arrow_size,
-                                tip.Y + math.sin(angle - math.pi * 0.75) * arrow_size
-                            )
-                            tri.PointA = tip
-                            tri.PointB = base1
-                            tri.PointC = base2
-                            tri.Visible = true
+                            arrow.Visible = false
                         end
+                    else
+                        arrow.Visible = false
                     end
+                else
+                    arrow.Visible = false
                 end
             end
+
+            Variables.PA_radarCircle.Visible = anyVisible
+            Variables.PA_radarCircle.Position = screenCenter
         end
 
-        local function start()
-            if render_conn then return end
-            render_conn = services.RunService.RenderStepped:Connect(render)
-            maid:GiveTask(render_conn)
+        maid:GiveTask(services.RunService.RenderStepped:Connect(renderArrows))
+
+        -- UI (Visual)
+        do
+            local tab = UI.Tabs.Visual or UI.Tabs.Misc
+            local group = tab:AddLeftGroupbox("Player Proximity", "radar")
+            group:AddSlider("ProximityDistanceSlider", {
+                Text = "Max Distance",
+                Default = 2000, Min = 0, Max = 20000, Rounding = 0, Compact = false,
+            })
+            group:AddToggle("ProximityArrowsToggle", { Text = "Arrows", Default = false })
+            group:AddToggle("ProximityCircleToggle", { Text = "Show Radar Circle", Default = false })
         end
 
-        local function stop()
-            if render_conn then pcall(function() render_conn:Disconnect() end); render_conn = nil end
-            if circle then circle.Visible = false end
-            for _, a in pairs(arrows_by_player) do a.Visible = false end
+        local function Stop()
+            for _, a in pairs(Variables.PA_arrows) do pcall(function() a:Remove() end) end
+            Variables.PA_arrows = {}
+            pcall(function() Variables.PA_radarCircle:Remove() end)
+            maid:DoCleaning()
         end
 
-        -- UI (Visual → Player Proximity)
-        local tab = ui.Tabs.Visual or ui.Tabs["Visual"] or ui.Tabs.Main
-        local group = tab:AddLeftGroupbox("Player Proximity", "radar")
-        group:AddSlider("ProximityDistanceSlider", {
-            Text = "Detection Radius", Default = 250, Min = 0, Max = 1000, Rounding = 1, Compact = true,
-        })
-        group:AddToggle("ProximityArrowsToggle", { Text = "Proximity Arrows", Default = false })
-        group:AddToggle("ProximityCircleToggle", { Text = "FOV Circle", Default = false })
-
-        ui.Toggles.ProximityArrowsToggle:OnChanged(function(v) if v then start() else stop() end end)
-        ui.Toggles.ProximityCircleToggle:OnChanged(function() render() end)
-
-        maid:GiveTask(services.Players.PlayerAdded:Connect(ensure_arrow))
-        maid:GiveTask(services.Players.PlayerRemoving:Connect(remove_arrow))
-        for _, plr in ipairs(services.Players:GetPlayers()) do ensure_arrow(plr) end
-
-        return { Name = "ProximityArrows", Stop = function() stop(); maid:DoCleaning() end }
+        return { Name = "ProximityArrows", Stop = Stop }
     end
 end
