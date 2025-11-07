@@ -1,5 +1,4 @@
--- modules/universal/noclip.lua
--- modules/noclip.lua
+-- "modules/universal/movement/noclip.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
@@ -57,19 +56,26 @@ do
         end
 
         -- [4] UI CREATION
-        -- UI is already created by loader.
+        local MovementGroupBox = UI.Tabs.Main:AddLeftGroupbox("Movement", "person-standing")
+        MovementGroupBox:AddDivider()
+		local NoclipToggle = MovementGroupBox:AddToggle("NoclipToggle", {
+			Text = "No Clip",
+			Tooltip = "Makes you go through objects.", 
+			Default = false, 
+		})
+		UI.Toggles.NoclipToggle:AddKeyPicker("NoclipKeybind", {
+			Text = "No Clip",
+			SyncToggleState = true,
+			Mode = "Toggle", 
+		})
 
-        -- [5] UI WIRING
+        -- [5] UI WIRING (CORRECTED)
         UI.Toggles.NoclipToggle:OnChanged(function(enabledState)
-            Variables.RunFlag = enabledState
             if enabledState then Start() else Stop() end
         end)
         
-        -- Seed default value
-        Variables.RunFlag = UI.Toggles.NoclipToggle.Value
-        
         -- Start if already enabled
-        if Variables.RunFlag then
+        if UI.Toggles.NoclipToggle.Value then
             Start()
         end
 
