@@ -1,4 +1,4 @@
--- modules/acbypass/SightOverseer.lua
+-- "modules/wfyb/acbypass/sightoverseer.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
