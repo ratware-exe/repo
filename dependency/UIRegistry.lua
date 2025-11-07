@@ -1,11 +1,10 @@
 -- "dependency/UIRegistry.lua",
-print('new')
 do
   return function(UserInterface)
     -- Shared deps (your system)
-    local Services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
-    local Maid = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-    local Signal = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
+    local Services   = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+    local Maid       = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+    local Signal     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
 
     local CleanupMaid = Maid.new()
     local GlobalEnvironment = (getgenv and getgenv()) or _G
@@ -14,6 +13,127 @@ do
     GlobalEnvironment.Toggles = UserInterface.Toggles
     GlobalEnvironment.Options = UserInterface.Options
     GlobalEnvironment.Library = UserInterface.Library
+
+    ---------------------------------------------------------------------------
+    -- Multi-session manager
+    ---------------------------------------------------------------------------
+    local ManagerInstance = rawget(GlobalEnvironment, "UISharedManager")
+    if not ManagerInstance then
+      ManagerInstance = { Sessions = {}, Active = nil }
+      rawset(GlobalEnvironment, "UISharedManager", ManagerInstance)
+    end
+
+    local function NewGuid()
+      local UniqueId
+      if Services and Services.HttpService then
+        pcall(function() UniqueId = Services.HttpService:GenerateGUID(false) end)
+      end
+      return UniqueId or ("sess_" .. tostring(math.random()) .. "_" .. tostring(os.clock()))
+    end
+
+    -- Back-compat upgrade
+    if rawget(GlobalEnvironment, "UIShared") and not ManagerInstance.__upgraded then
+      local LegacySharedData = GlobalEnvironment.UIShared
+      if type(LegacySharedData) == "table" and not ManagerInstance.Sessions.legacy then
+        ManagerInstance.Sessions.legacy = LegacySharedData
+      end
+      ManagerInstance.__upgraded = true
+    end
+
+    local SessionId = NewGuid()
+
+    -- Per-session state (dedupe per run)
+    local function NewSession(Identifier)
+      local Session = {
+        Id = Identifier,
+        Elements = {
+          label       = {},
+          button      = {},
+          toggle      = {},
+          checkbox    = {},
+          input       = {},
+          slider      = {},
+          dropdown    = {},
+          keybind     = {},
+          colorpicker = {},
+          divider     = {},
+          viewport    = {},
+          image       = {},
+          video       = {},
+          uipass      = {},
+          groupbox    = {}, -- "__name__:Title" → Groupbox
+          tabbox      = {}, -- "__name__:Title" → Tabbox
+          tab         = {}, -- "__name__:Name"  → Tab
+        },
+        ButtonSignals = {},
+        -- Canonical maps
+        _canonicalTabs   = {},
+        _perTab = {
+          groupboxes = setmetatable({}, { __mode = "k" }),
+          tabboxes   = setmetatable({}, { __mode = "k" }),
+        },
+        _tabboxTabs = setmetatable({}, { __mode = "k" }),
+        _patched = {
+          tabs       = setmetatable({}, { __mode = "k" }),
+          tabboxes   = setmetatable({}, { __mode = "k" }),
+          groupboxes = setmetatable({}, { __mode = "k" }),
+          hosts      = setmetatable({}, { __mode = "k" }),
+        },
+        Find = function(self, ElementKind, StorageKey)
+          ElementKind = string.lower(ElementKind)
+          local Bucket = self.Elements[ElementKind]
+          return Bucket and Bucket[StorageKey] or nil
+        end,
+      }
+      return Session
+    end
+
+    local SharedSessionState = NewSession(SessionId)
+    ManagerInstance.Sessions[SessionId] = SharedSessionState
+    ManagerInstance.Active = SessionId
+    GlobalEnvironment.UIShared = SharedSessionState
+    GlobalEnvironment.UISharedSessionId = SessionId
+
+    ---------------------------------------------------------------------------
+    -- Utilities
+    ---------------------------------------------------------------------------
+    local function Clone(TableToClone)
+      if type(TableToClone) ~= "table" then return TableToClone end
+      local NewTable = {}; for Key, Value in pairs(TableToClone) do NewTable[Key] = Value end; return NewTable
+    end
+
+    local function IdOrTextKey(ElementKind, Identifier, Configuration, TextFallback)
+      if type(Identifier) == "string" and Identifier ~= "" then return Identifier end
+      local FallbackText = TextFallback or (type(Configuration) == "table" and Configuration.Text)
+      if type(FallbackText) == "string" and FallbackText ~= "" then return "__name__:" .. FallbackText end
+      return nil
+    end
+
+    local function remember(ElementKind, StorageKey, ElementReference)
+      if not StorageKey then return end
+      SharedSessionState.Elements[ElementKind][StorageKey] = ElementReference
+      CleanupMaid:GiveTask(function()
+        if SharedSessionState.Elements[ElementKind][StorageKey] == ElementReference then
+          SharedSessionState.Elements[ElementKind][StorageKey] = nil
+        end
+      end)
+    end
+
+    local function attach_OnChanged(ElementReference, CallbackFunction)
+      if type(CallbackFunction) ~= "function" or type(ElementReference) ~= "table" then return end
+      if type(ElementReference.OnChanged) == "function" then
+        local Success, Connection = pcall(function() return ElementReference:OnChanged(CallbackFunction) end)
+        if Success and Connection then CleanupMaid:GiveTask(Connection) end
+      end
+    end
+
+    local function was_host_method_patched(HostObject, MethodName)
+      local PatchedMethodsMap = SharedSessionState._patched.hosts[HostObject]
+      if PatchedMethodsMap and PatchedMethodsMap[MethodName] then return true end
+      PatchedMethodsMap = PatchedMethodsMap or {}; PatchedMethodsMap[MethodName] = true
+      SharedSessionState._patched.hosts[HostObject] = PatchedMethodsMap
+      return false
+    end
 
     ---------------------------------------------------------------------------
     -- Top-Level Window Patcher
@@ -70,6 +190,129 @@ do
     if type(UserInterface.GetTab) == "function" then
       local OriginalFunction = UserInterface.GetTab
       UserInterface.GetTab = function(self, Name, ...)
+        local ExistingTab = OriginalFunction(self, Name, ...)
+        if type(ExistingTab) == "table" then
+          patch_tab(ExistingTab, Name) -- Patch the retrieved tab (idempotent)
+        end
+        return ExistingTab
+      end
+      CleanupMaid:GiveTask(function() UserInterface.GetTab = OriginalFunction end)
+    end
+
+    -- SelectTab doesn't return a tab, so just needs to be restored.
+    if type(UserInterface.SelectTab) == "function" then
+      local OriginalFunction = UserInterface.SelectTab
+      -- We don't need to register/dedupe this, just restore the function.
+      CleanupMaid:GiveTask(function() UserInterface.SelectTab = OriginalFunction end)
+    end
+
+    ---------------------------------------------------------------------------
+    -- Host patchers (KeyPicker / ColorPicker / Button)
+    ---------------------------------------------------------------------------
+    local function patch_keypicker_host(HostObject)
+      if type(HostObject) ~= "table" then return end
+
+      -- Shared wrapper logic for KeyPicker and its alias Keybind
+      local function WrapKeyPicker(OriginalFunction)
+        return function(self, Identifier, Configuration)
+          Configuration = Configuration or {}
+          local StorageKey = IdOrTextKey("keybind", Identifier, Configuration, Configuration.Text)
+          if StorageKey and SharedSessionState.Elements.keybind[StorageKey] then
+            local ExistingElement = SharedSessionState.Elements.keybind[StorageKey]
+            if type(Configuration.Callback) == "function" and ExistingElement.OnClick then
+              local Success1, Connection1 = pcall(function() return ExistingElement:OnClick(Configuration.Callback) end)
+              if Success1 and Connection1 then CleanupMaid:GiveTask(Connection1) end
+            end
+            if type(Configuration.ChangedCallback) == "function" and ExistingElement.OnChanged then
+              local Success2, Connection2 = pcall(function() return ExistingElement:OnChanged(Configuration.ChangedCallback) end)
+              if Success2 and Connection2 then CleanupMaid:GiveTask(Connection2) end
+            end
+            if type(Configuration.Clicked) == "function" and ExistingElement.OnClick then
+              local Success3, Connection3 = pcall(function() return ExistingElement:OnClick(Configuration.Clicked) end)
+              if Success3 and Connection3 then CleanupMaid:GiveTask(Connection3) end
+            end
+            return ExistingElement
+          end
+          local KeybindElement = OriginalFunction(self, Identifier, Configuration)
+          if StorageKey then remember("keybind", StorageKey, KeybindElement) end
+          return KeybindElement
+        end
+      end
+
+      -- Patch AddKeyPicker
+      if type(HostObject.AddKeyPicker) == "function" and not was_host_method_patched(HostObject, "AddKeyPicker") then
+        local OriginalFunction = HostObject.AddKeyPicker
+        HostObject.AddKeyPicker = WrapKeyPicker(OriginalFunction)
+        CleanupMaid:GiveTask(function() HostObject.AddKeyPicker = OriginalFunction end)
+      end
+
+      -- Patch AddKeybind (alias)
+      if type(HostObject.AddKeybind) == "function" and not was_host_method_patched(HostObject, "AddKeybind") then
+        local OriginalFunction = HostObject.AddKeybind
+        HostObject.AddKeybind = WrapKeyPicker(OriginalFunction)
+        CleanupMaid:GiveTask(function() HostObject.AddKeybind = OriginalFunction end)
+      end
+    end
+
+    local function patch_colorpicker_host(HostObject)
+      if type(HostObject) ~= "table" or type(HostObject.AddColorPicker) ~= "function" or was_host_method_patched(HostObject, "AddColorPicker") then
+        return
+      end
+      local OriginalFunction = HostObject.AddColorPicker
+      HostObject.AddColorPicker = function(self, Identifier, Configuration)
+        Configuration = Configuration or {}
+        local StorageKey = IdOrTextKey("colorpicker", Identifier, Configuration, Configuration.Title)
+        if StorageKey and SharedSessionState.Elements.colorpicker[StorageKey] then
+          attach_OnChanged(SharedSessionState.Elements.colorpicker[StorageKey], (Configuration.Callback or Configuration.Changed))
+          return SharedSessionState.Elements.colorpicker[StorageKey]
+        end
+        local ColorpickerElement = OriginalFunction(self, Identifier, Configuration)
+        if StorageKey then remember("colorpicker", StorageKey, ColorpickerElement) end
+        return ColorpickerElement
+      end
+      CleanupMaid:GiveTask(function() HostObject.AddColorPicker = OriginalFunction end)
+    end
+
+    local function patch_button_host(HostObject)
+      if type(HostObject) ~= "table" or type(HostObject.AddButton) ~= "function" or was_host_method_patched(HostObject, "AddButton") then
+        return
+      end
+      local OriginalFunction = HostObject.AddButton
+      HostObject.AddButton = function(self, Argument1, Argument2)
+        local Configuration, ButtonText, ButtonFunction
+        if type(Argument1) == "table" then
+          Configuration = Clone(Argument1); ButtonText, ButtonFunction = Configuration.Text, Configuration.Func
+        else
+          ButtonText, ButtonFunction = Argument1, Argument2
+        end
+        local StorageKey = IdOrTextKey("button", nil, Configuration, ButtonText)
+        if StorageKey and SharedSessionState.Elements.button[StorageKey] then
+          if type(ButtonFunction) == "function" then
+            local SignalInstance = SharedSessionState.ButtonSignals[StorageKey]
+            if SignalInstance then
+              local Success, Connection = pcall(function() return SignalInstance:Connect(ButtonFunction) end)
+              if Success and Connection then CleanupMaid:GiveTask(Connection) end
+            end
+          end
+          return SharedSessionState.Elements.button[StorageKey]
+        end
+        local SignalInstance = Signal.new()
+        SharedSessionState.ButtonSignals[StorageKey or ("__btn__:" .. tostring(self))] = SignalInstance
+        CleanupMaid:GiveTask(function()
+          SignalInstance:Destroy()
+          SharedSessionState.ButtonSignals[StorageKey or ("__btn__:" .. tostring(self))] = nil
+        end)
+        if type(ButtonFunction) == "function" then
+          local Success, Connection = pcall(function() return SignalInstance:Connect(ButtonFunction) end)
+          if Success and Connection then CleanupMaid:GiveTask(Connection) end
+        end
+        local function EventAggregator(...)
+          local Arguments = table.pack(...)
+          local Success, ErrorMessage = pcall(function()
+            SignalInstance:Fire(table.unpack(Arguments, 1, Arguments.n))
+          end)
+          if not Success then warn(ErrorMessage) end
+        end
         local NewElement
         if Configuration then
           Configuration.Func = EventAggregator
@@ -228,8 +471,6 @@ do
           local DividerElement = OriginalFunction(self, ...)
           -- Dividers are anonymous and cannot be de-duplicated.
           -- Do not call remember() on them.
-          -- local Guid = Services.HttpService and Services.HttpService:GenerateGUID(false) or tostring(DividerElement)
-          -- remember("divider", Guid, DividerElement)
           return DividerElement
         end
         CleanupMaid:GiveTask(function() Groupbox.AddDivider = OriginalFunction end)
@@ -521,7 +762,31 @@ do
         CleanupMaid:GiveTask(function() TabObject.AddTabbox = OriginalFunction end)
       end
 
-      if type(Name) == "string" and Name ~= "" then
+      if type(TabName) == "string" and TabName ~= "" then
+        remember("tab", "__name__:" .. TabName, TabObject)
+      end
+    end
+
+    -- === Canonical Tabs Proxy ===
+    local RawTabs = UserInterface.Tabs
+    local CanonicalTabs = {}
+    local CanonicalMetatable = {}
+
+    CanonicalMetatable.__index = function(_, Key)
+      local CachedElement = SharedSessionState._canonicalTabs[Key]
+      if CachedElement then return CachedElement end
+      local RawElement = RawTabs and RawTabs[Key]
+      if RawElement == nil then return nil end
+      if type(RawElement) == "table" then
+        patch_tab(RawElement, Key)
+      end
+      SharedSessionState._canonicalTabs[Key] = RawElement
+      return RawElement
+    end
+
+    CanonicalMetatable.__pairs = function()
+      local KeyList = {}
+      for Key in pairs(RawTabs or {}) do table.insert(KeyList, Key) end
       local Index = 0
       return function()
         Index = Index + 1
