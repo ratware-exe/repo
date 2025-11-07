@@ -16,7 +16,7 @@ local featurePaths = {
     "modules/universal/errorsuppressor.lua",
     -- Movement 
     "modules/universal/movement/speedhack.lua",
-    "modules/universal/movement/flight.lua",
+    "modules/universal/movement/fly.lua",
     "modules/universal/movement/noclip.lua",
         
     "modules/wfyb/infinitestamina.lua",
