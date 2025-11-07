@@ -1,292 +1,235 @@
 -- modules/universal/playeresp.lua
 do
-    return function(ui)
+    return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
-        local maid = Maid.new()
-        local player_maids = setmetatable({}, { __mode = "k" })
-        local drawings_by_player = {}
-        local render_conn
+        local Variables = {
+            Maids = { PlayerESP = Maid.new() },
+            PlayerMaids = setmetatable({}, { __mode = "k" }),
 
-        local name_size, health_size = 12, 12
-        local health_bar_w, health_bar_h = 50, 5
-        local highlight_outline_t = 0
-        local buffer, y_offset = 4, 30
+            NameTextSize      = 12,
+            HealthTextSize    = 12,
+            NameTextCenter    = true,
+            NameTextOutline   = true,
+            HealthTextCenter  = true,
+            HealthTextOutline = true,
+            HealthBarWidth    = 50,
+            HealthBarHeight   = 5,
+            HealthBarBGColor  = Color3.fromRGB(0, 0, 0),
+            HighlightOutlineTransparency = 0,
+            Buffer            = 4,
+            VerticalOffset    = 30,
 
-        local function add_drawing_cleanup(m, obj)
-            m:GiveTask(function()
-                pcall(function()
-                    if obj and obj.Remove then obj:Remove() end
-                end)
-            end)
-            return obj
-        end
+            PlayerESP            = "PlayerESPHighlightToggle",
+            PlayerESPName        = "PlayerESPNameDistanceToggle",
+            PlayerESPHealthbar   = "PlayerESPHealthBarToggle",
+            PlayerESPHealthText  = "PlayerESPHealthTextToggle",
+            PlayerESPTracer      = "PlayerESPTracerToggle",
+            PlayerESPBox         = "PlayerESPBoxToggle",
 
-        local function get_player_maid(plr)
-            local m = player_maids[plr]
-            if not m then m = Maid.new(); player_maids[plr] = m end
+            PlayerESPColor       = "PlayerESPHighlightColorpicker",
+            PlayerESPNameColor   = "PlayerESPNameDistanceColorpicker",
+            PlayerESPBoxColor    = "PlayerESPBoxColorpicker",
+            PlayerESPTracerColor = "PlayerESPTracerColorpicker",
+
+            PlayerESPDistanceSlider = "PlayerESPDistanceSlider",
+        }
+
+        local function GetPlayerMaid(plr)
+            local m = Variables.PlayerMaids[plr]
+            if not m then m = Maid.new(); Variables.PlayerMaids[plr] = m end
             return m
         end
-
-        local function create_drawing(t, props)
-            local d = Drawing.new(t)
-            for k, v in pairs(props) do d[k] = v end
-            return d
-        end
-
-        local function add_highlight(plr, color, transp)
-            if plr == services.Players.LocalPlayer then return end
-            local char = plr.Character
-            if not char then return end
-            local hl = char:FindFirstChild("Player_ESP")
-            if not hl then
-                hl = Instance.new("Highlight")
-                hl.Name = "Player_ESP"
-                hl.FillColor = color
-                hl.FillTransparency = transp
-                hl.OutlineTransparency = highlight_outline_t
-                get_player_maid(plr):GiveTask(hl)
-                hl.Parent = char
-            else
-                hl.FillColor = color
-                hl.FillTransparency = transp
-            end
-        end
-
-        local function remove_highlight(plr)
-            local char = plr and plr.Character
-            if not char then return end
-            local hl = char:FindFirstChild("Player_ESP")
-            if hl then hl:Destroy() end
-        end
-
-        local function ensure_esp(plr)
-            if plr == services.Players.LocalPlayer then return end
-            if drawings_by_player[plr] then return end
-            local m = get_player_maid(plr)
-            drawings_by_player[plr] = {
-                name = add_drawing_cleanup(m, create_drawing("Text",   { Size=name_size, Center=true,  Outline=true,  Visible=false })),
-                htxt = add_drawing_cleanup(m, create_drawing("Text",   { Size=health_size, Center=true, Outline=true, Visible=false })),
-                hbg  = add_drawing_cleanup(m, create_drawing("Square", { Filled=true, Color=Color3.new(0,0,0), Visible=false })),
-                hfg  = add_drawing_cleanup(m, create_drawing("Square", { Filled=true, Color=Color3.fromRGB(0,255,0), Visible=false })),
-                box  = {
-                    add_drawing_cleanup(m, create_drawing("Line", {Thickness=1, Visible=false})),
-                    add_drawing_cleanup(m, create_drawing("Line", {Thickness=1, Visible=false})),
-                    add_drawing_cleanup(m, create_drawing("Line", {Thickness=1, Visible=false})),
-                    add_drawing_cleanup(m, create_drawing("Line", {Thickness=1, Visible=false})),
-                },
-                tracer = add_drawing_cleanup(m, create_drawing("Line", {Thickness=1, Visible=false}))
-            }
-        end
-
-        local function clear_esp(plr)
-            local d = drawings_by_player[plr]
-            if d then
-                for _, v in pairs(d) do
-                    if typeof(v) == "table" then
-                        for _, l in ipairs(v) do pcall(function() l.Visible = false end) end
-                    else
-                        pcall(function() v.Visible = false end)
-                    end
-                end
-                drawings_by_player[plr] = nil
-            end
-        end
-
-        local function any_enabled()
-            return ui.Toggles.PlayerESPHighlightToggle and ui.Toggles.PlayerESPHighlightToggle.Value
-                or ui.Toggles.PlayerESPNameDistanceToggle and ui.Toggles.PlayerESPNameDistanceToggle.Value
-                or ui.Toggles.PlayerESPHealthBarToggle and ui.Toggles.PlayerESPHealthBarToggle.Value
-                or ui.Toggles.PlayerESPHealthTextToggle and ui.Toggles.PlayerESPHealthTextToggle.Value
-                or ui.Toggles.PlayerESPTracerToggle and ui.Toggles.PlayerESPTracerToggle.Value
-                or ui.Toggles.PlayerESPBoxToggle and ui.Toggles.PlayerESPBoxToggle.Value
-        end
-
-        local function render_step()
-            local cam = services.Workspace.CurrentCamera
-            if not cam then return end
-            local vp = cam.ViewportSize
-
-            for _, plr in ipairs(services.Players:GetPlayers()) do
-                if plr ~= services.Players.LocalPlayer then
-                    local char = plr.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    local d = drawings_by_player[plr]
-                    if not (char and hrp and hum) then
-                        if d then
-                            -- hide all if missing
-                            clear_esp(plr)
-                        end
-                    else
-                        ensure_esp(plr)
-                        d = drawings_by_player[plr]
-                        local pos, on_screen = cam:WorldToViewportPoint(hrp.Position)
-                        local head = char:FindFirstChild("Head")
-                        local tl, _ = cam:WorldToViewportPoint((hrp.CFrame * CFrame.new(-2, 3, 0)).Position)
-                        local br, _ = cam:WorldToViewportPoint((hrp.CFrame * CFrame.new(2, -3, 0)).Position)
-
-                        -- Name + distance
-                        if ui.Toggles.PlayerESPNameDistanceToggle and ui.Toggles.PlayerESPNameDistanceToggle.Value and on_screen then
-                            local dist = (cam.CFrame.Position - hrp.Position).Magnitude
-                            d.name.Text = string.format("%s [%.0f]", plr.Name, dist)
-                            d.name.Color = ui.Options.PlayerESPNameDistanceColorpicker and ui.Options.PlayerESPNameDistanceColorpicker.Value or Color3.new(1,1,1)
-                            d.name.Position = Vector2.new(pos.X, pos.Y - y_offset)
-                            d.name.Visible = true
-                        else
-                            d.name.Visible = false
-                        end
-
-                        -- Health bar + text
-                        if ui.Toggles.PlayerESPHealthBarToggle and ui.Toggles.PlayerESPHealthBarToggle.Value and on_screen then
-                            local hp = math.clamp(hum.Health, 0, hum.MaxHealth)
-                            local ratio = hum.MaxHealth > 0 and (hp / hum.MaxHealth) or 0
-                            local w = health_bar_w
-                            local h = health_bar_h
-                            local x = pos.X - w/2
-                            local y = pos.Y - y_offset + 12
-                            d.hbg.Position = Vector2.new(x, y)
-                            d.hbg.Size = Vector2.new(w, h)
-                            d.hbg.Visible = true
-
-                            d.hfg.Position = Vector2.new(x, y)
-                            d.hfg.Size = Vector2.new(w * ratio, h)
-                            d.hfg.Visible = true
-
-                            if ui.Toggles.PlayerESPHealthTextToggle and ui.Toggles.PlayerESPHealthTextToggle.Value then
-                                d.htxt.Text = string.format("%d/%d", hp, hum.MaxHealth)
-                                d.htxt.Position = Vector2.new(pos.X, y + h + 10)
-                                d.htxt.Visible = true
-                            else
-                                d.htxt.Visible = false
-                            end
-                        else
-                            d.hbg.Visible = false
-                            d.hfg.Visible = false
-                            d.htxt.Visible = false
-                        end
-
-                        -- Box
-                        if ui.Toggles.PlayerESPBoxToggle and ui.Toggles.PlayerESPBoxToggle.Value and on_screen then
-                            local c = ui.Options.PlayerESPBoxColorpicker and ui.Options.PlayerESPBoxColorpicker.Value or Color3.new(1,1,1)
-                            d.box[1].From = Vector2.new(tl.X, tl.Y); d.box[1].To = Vector2.new(br.X, tl.Y); d.box[1].Color = c; d.box[1].Visible = true
-                            d.box[2].From = Vector2.new(br.X, tl.Y); d.box[2].To = Vector2.new(br.X, br.Y); d.box[2].Color = c; d.box[2].Visible = true
-                            d.box[3].From = Vector2.new(br.X, br.Y); d.box[3].To = Vector2.new(tl.X, br.Y); d.box[3].Color = c; d.box[3].Visible = true
-                            d.box[4].From = Vector2.new(tl.X, br.Y); d.box[4].To = Vector2.new(tl.X, tl.Y); d.box[4].Color = c; d.box[4].Visible = true
-                        else
-                            for _, ln in ipairs(d.box) do ln.Visible = false end
-                        end
-
-                        -- Tracer
-                        if ui.Toggles.PlayerESPTracerToggle and ui.Toggles.PlayerESPTracerToggle.Value and on_screen then
-                            local c = ui.Options.PlayerESPTracerColorpicker and ui.Options.PlayerESPTracerColorpicker.Value or Color3.new(1,1,1)
-                            d.tracer.From = Vector2.new(vp.X/2, vp.Y - 2)
-                            d.tracer.To   = Vector2.new((tl.X + br.X)/2, br.Y)
-                            d.tracer.Color = c
-                            d.tracer.Visible = true
-                        else
-                            d.tracer.Visible = false
-                        end
-                    end
-                end
-            end
-        end
-
-        local function start_render()
-            if render_conn or not any_enabled() then return end
-            render_conn = services.RunService.RenderStepped:Connect(render_step)
-            maid:GiveTask(render_conn)
-        end
-
-        local function stop_render()
-            if render_conn then
-                pcall(function() render_conn:Disconnect() end)
-                render_conn = nil
-            end
-        end
-
-        -- UI: Visual → Player ESP (exact keys from prompt.lua)
-        local tab = ui.Tabs.Visual or ui.Tabs["Visual"] or (ui.Tabs.Main or ui.Tabs.Misc)
-        local group = tab:AddLeftGroupbox("Player ESP", "scan-eye")
-
-        local t = group:AddToggle("PlayerESPHighlightToggle", { Text = "Highlights", Default = false })
-        t:AddColorPicker("PlayerESPHighlightColorpicker", { Default = Color3.fromRGB(255, 0, 0), Title = "Highlight Color", Transparency = 0.5 })
-
-        local n = group:AddToggle("PlayerESPNameDistanceToggle", { Text = "Name & Distance", Default = false })
-        n:AddColorPicker("PlayerESPNameDistanceColorpicker", { Default = Color3.fromRGB(255, 255, 255), Title = "Name Color", Transparency = 0 })
-
-        local b = group:AddToggle("PlayerESPBoxToggle", { Text = "Boxes", Default = false })
-        b:AddColorPicker("PlayerESPBoxColorpicker", { Default = Color3.fromRGB(255, 255, 255), Title = "Box Color", Transparency = 0 })
-
-        local tr = group:AddToggle("PlayerESPTracerToggle", { Text = "Tracers", Default = false })
-        tr:AddColorPicker("PlayerESPTracerColorpicker", { Default = Color3.fromRGB(255, 255, 255), Title = "Tracer Color", Transparency = 0 })
-
-        group:AddToggle("PlayerESPHealthBarToggle", { Text = "Show Health Bar", Default = false })
-        group:AddToggle("PlayerESPHealthTextToggle", { Text = "Show Health", Default = false })
-
-        -- Reactivity: highlight color live update
-        if ui.Options.PlayerESPHighlightColorpicker then
-            ui.Options.PlayerESPHighlightColorpicker:OnChanged(function()
-                local color = ui.Options.PlayerESPHighlightColorpicker.Value
-                local trn   = ui.Options.PlayerESPHighlightColorpicker.Transparency
-                for _, plr in ipairs(services.Players:GetPlayers()) do
-                    if ui.Toggles.PlayerESPHighlightToggle.Value then
-                        add_highlight(plr, color, trn)
-                    end
+        local function AddDrawingCleanup(maid, drawingObj)
+            maid:GiveTask(function()
+                if drawingObj and drawingObj.Remove then
+                    pcall(function() drawingObj:Remove() end)
                 end
             end)
+            return drawingObj
         end
 
-        -- Toggle wiring
-        local function recheck()
-            -- highlights
-            if ui.Toggles.PlayerESPHighlightToggle and ui.Toggles.PlayerESPHighlightToggle.Value then
-                local color = ui.Options.PlayerESPHighlightColorpicker and ui.Options.PlayerESPHighlightColorpicker.Value or Color3.new(1,0,0)
-                local trn = ui.Options.PlayerESPHighlightColorpicker and ui.Options.PlayerESPHighlightColorpicker.Transparency or 0.5
-                for _, p in ipairs(services.Players:GetPlayers()) do add_highlight(p, color, trn) end
-            else
-                for _, p in ipairs(services.Players:GetPlayers()) do remove_highlight(p) end
+        -- ESP builder (verbatim behaviors)
+        local function createESP(plr)
+            local pm = GetPlayerMaid(plr)
+            pm:DoCleaning()
+
+            local highlight = Instance.new("Highlight")
+            highlight.FillTransparency = 1
+            highlight.OutlineTransparency = Variables.HighlightOutlineTransparency
+            highlight.Parent = services.CoreGui
+            pm:GiveTask(highlight)
+
+            local nameText   = AddDrawingCleanup(pm, Drawing.new("Text"))
+            local distanceText = AddDrawingCleanup(pm, Drawing.new("Text"))
+            local boxLineTop    = AddDrawingCleanup(pm, Drawing.new("Line"))
+            local boxLineBottom = AddDrawingCleanup(pm, Drawing.new("Line"))
+            local boxLineLeft   = AddDrawingCleanup(pm, Drawing.new("Line"))
+            local boxLineRight  = AddDrawingCleanup(pm, Drawing.new("Line"))
+            local tracer        = AddDrawingCleanup(pm, Drawing.new("Line"))
+            local healthBarBG   = AddDrawingCleanup(pm, Drawing.new("Square"))
+            local healthBarFG   = AddDrawingCleanup(pm, Drawing.new("Square"))
+
+            local function onRenderStep()
+                local camera = services.Workspace.CurrentCamera
+                local char   = plr.Character
+                local hrp    = char and char:FindFirstChild("HumanoidRootPart")
+                local hum    = char and char:FindFirstChildOfClass("Humanoid")
+
+                local dist = math.huge
+                if camera and hrp then
+                    dist = (camera.CFrame.Position - hrp.Position).Magnitude
+                end
+
+                local maxDistOpt = UI.Options and UI.Options[Variables.PlayerESPDistanceSlider] and UI.Options[Variables.PlayerESPDistanceSlider].Value
+                local maxDist = tonumber(maxDistOpt) or 8000
+
+                -- highlight on/off
+                local showHL = UI.Toggles and UI.Toggles[Variables.PlayerESP] and UI.Toggles[Variables.PlayerESP].Value and dist <= maxDist
+                highlight.Adornee = showHL and char or nil
+
+                -- name + distance text
+                local showName = UI.Toggles and UI.Toggles[Variables.PlayerESPName] and UI.Toggles[Variables.PlayerESPName].Value and dist <= maxDist
+                if camera and hrp and showName then
+                    local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, Variables.VerticalOffset, 0))
+                    if onScreen then
+                        nameText.Visible = true
+                        nameText.Center = Variables.NameTextCenter
+                        nameText.Outline = Variables.NameTextOutline
+                        nameText.Size = Variables.NameTextSize
+                        local cOpt = UI.Options and UI.Options[Variables.PlayerESPNameColor]
+                        local col = (cOpt and cOpt.Value) or Color3.new(1, 1, 1)
+                        nameText.Color = col
+                        nameText.Position = Vector2.new(screenPos.X, screenPos.Y)
+                        local label = plr.DisplayName or plr.Name
+                        distanceText.Visible = true
+                        distanceText.Center = Variables.HealthTextCenter
+                        distanceText.Outline = Variables.HealthTextOutline
+                        distanceText.Size = Variables.HealthTextSize
+                        distanceText.Color = col
+                        distanceText.Position = Vector2.new(screenPos.X, screenPos.Y + 12)
+                        distanceText.Text = string.format("%.0f", dist)
+                        nameText.Text = label
+                    else
+                        nameText.Visible = false
+                        distanceText.Visible = false
+                    end
+                else
+                    nameText.Visible = false
+                    distanceText.Visible = false
+                end
+
+                -- box (top/bottom/left/right)
+                local showBox = UI.Toggles and UI.Toggles[Variables.PlayerESPBox] and UI.Toggles[Variables.PlayerESPBox].Value and dist <= maxDist
+                if camera and hrp and showBox then
+                    local cOpt = UI.Options and UI.Options[Variables.PlayerESPBoxColor]
+                    local col = (cOpt and cOpt.Value) or Color3.new(1, 1, 1)
+
+                    local cf = hrp.CFrame
+                    local size = Vector2.new(60, 80)
+                    local p = camera:WorldToViewportPoint(cf.Position)
+                    local tl = Vector2.new(p.X - size.X/2, p.Y - size.Y/2)
+                    local tr = Vector2.new(p.X + size.X/2, p.Y - size.Y/2)
+                    local bl = Vector2.new(p.X - size.X/2, p.Y + size.Y/2)
+                    local br = Vector2.new(p.X + size.X/2, p.Y + size.Y/2)
+
+                    local lines = { boxLineTop, boxLineBottom, boxLineLeft, boxLineRight }
+                    for i=1,4 do lines[i].Visible = true end
+
+                    boxLineTop.From = tl; boxLineTop.To = tr; boxLineTop.Color = col
+                    boxLineBottom.From = bl; boxLineBottom.To = br; boxLineBottom.Color = col
+                    boxLineLeft.From = tl; boxLineLeft.To = bl; boxLineLeft.Color = col
+                    boxLineRight.From = tr; boxLineRight.To = br; boxLineRight.Color = col
+                else
+                    boxLineTop.Visible = false
+                    boxLineBottom.Visible = false
+                    boxLineLeft.Visible = false
+                    boxLineRight.Visible = false
+                end
+
+                -- tracer
+                local showTracer = UI.Toggles and UI.Toggles[Variables.PlayerESPTracer] and UI.Toggles[Variables.PlayerESPTracer].Value and dist <= maxDist
+                if camera and hrp and showTracer then
+                    local cOpt = UI.Options and UI.Options[Variables.PlayerESPTracerColor]
+                    local col = (cOpt and cOpt.Value) or Color3.new(1, 1, 1)
+                    local p = camera:WorldToViewportPoint(hrp.Position)
+                    local bottom = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
+                    tracer.Visible = true
+                    tracer.From = bottom
+                    tracer.To = Vector2.new(p.X, p.Y)
+                    tracer.Color = col
+                else
+                    tracer.Visible = false
+                end
+
+                -- healthbar + text
+                local showHB = UI.Toggles and UI.Toggles[Variables.PlayerESPHealthbar] and UI.Toggles[Variables.PlayerESPHealthbar].Value and dist <= maxDist
+                local showHT = UI.Toggles and UI.Toggles[Variables.PlayerESPHealthText] and UI.Toggles[Variables.PlayerESPHealthText].Value and dist <= maxDist
+                if hum and camera and hrp and (showHB or showHT) then
+                    local p = camera:WorldToViewportPoint(hrp.Position)
+                    local x = p.X - 30
+                    local y = p.Y + 42
+                    local w = Variables.HealthBarWidth
+                    local h = Variables.HealthBarHeight
+                    local pct = math.clamp((hum.Health / math.max(1, hum.MaxHealth)), 0, 1)
+
+                    if showHB then
+                        healthBarBG.Visible = true
+                        healthBarFG.Visible = true
+                        healthBarBG.Position = Vector2.new(x, y)
+                        healthBarBG.Size = Vector2.new(w, h)
+                        healthBarBG.Filled = true
+                        healthBarBG.Color = Variables.HealthBarBGColor
+
+                        healthBarFG.Position = Vector2.new(x, y)
+                        healthBarFG.Size = Vector2.new(w * pct, h)
+                        healthBarFG.Filled = true
+                        healthBarFG.Color = Color3.fromRGB(0, 235, 0)
+                    else
+                        healthBarBG.Visible = false
+                        healthBarFG.Visible = false
+                    end
+
+                    if showHT then
+                        distanceText.Visible = true
+                        distanceText.Size = Variables.HealthTextSize
+                        distanceText.Center = true
+                        distanceText.Outline = true
+                        distanceText.Text = string.format("%d / %d", hum.Health, hum.MaxHealth)
+                        distanceText.Position = Vector2.new(x + w/2, y + h + 10)
+                    end
+                end
             end
-            -- drawings
-            if any_enabled() then start_render() else stop_render(); for plr in pairs(drawings_by_player) do clear_esp(plr) end end
+
+            Variables.Maids.PlayerESP:GiveTask(services.RunService.RenderStepped:Connect(onRenderStep))
         end
 
-        for _, key in ipairs({
-            "PlayerESPHighlightToggle","PlayerESPNameDistanceToggle","PlayerESPHealthBarToggle",
-            "PlayerESPHealthTextToggle","PlayerESPTracerToggle","PlayerESPBoxToggle"
-        }) do
-            if ui.Toggles[key] then ui.Toggles[key]:OnChanged(recheck) end
+        -- UI (Visual → Player ESP; verbatim group/keys)
+        do
+            local tab = UI.Tabs.Visual or UI.Tabs.Misc
+            local group = tab:AddLeftGroupbox("Player ESP", "user")
+            group:AddSlider("PlayerESPDistanceSlider", {
+                Text = "Max Distance",
+                Default = 8000, Min = 0, Max = 20000, Rounding = 0, Compact = false,
+            })
+            group:AddToggle("PlayerESPHighlightToggle", { Text = "Highlight", Default = false })
+                :AddColorPicker("PlayerESPHighlightColorpicker")
+            group:AddToggle("PlayerESPNameDistanceToggle", { Text = "Name + Distance", Default = false })
+                :AddColorPicker("PlayerESPNameDistanceColorpicker")
+            group:AddToggle("PlayerESPBoxToggle", { Text = "Boxes", Default = false })
+                :AddColorPicker("PlayerESPBoxColorpicker")
+            group:AddToggle("PlayerESPTracerToggle", { Text = "Tracers", Default = false })
+                :AddColorPicker("PlayerESPTracerColorpicker")
+            group:AddToggle("PlayerESPHealthBarToggle", { Text = "Health Bar", Default = false })
+            group:AddToggle("PlayerESPHealthTextToggle", { Text = "Health Text", Default = false })
         end
 
-        -- lifecycle for players
-        maid:GiveTask(services.Players.PlayerAdded:Connect(function(plr)
-            if plr == services.Players.LocalPlayer then return end
-            ensure_esp(plr)
-            if ui.Toggles.PlayerESPHighlightToggle and ui.Toggles.PlayerESPHighlightToggle.Value then
-                local color = ui.Options.PlayerESPHighlightColorpicker and ui.Options.PlayerESPHighlightColorpicker.Value or Color3.new(1,0,0)
-                local trn = ui.Options.PlayerESPHighlightColorpicker and ui.Options.PlayerESPHighlightColorpicker.Transparency or 0.5
-                add_highlight(plr, color, trn)
-            end
-        end))
-        maid:GiveTask(services.Players.PlayerRemoving:Connect(function(plr)
-            clear_esp(plr)
-            remove_highlight(plr)
-            local m = player_maids[plr]
-            if m then m:DoCleaning(); player_maids[plr] = nil end
-        end))
-
-        -- seed
-        for _, plr in ipairs(services.Players:GetPlayers()) do
-            if plr ~= services.Players.LocalPlayer then ensure_esp(plr) end
+        local function Stop()
+            Variables.Maids.PlayerESP:DoCleaning()
+            for k, m in pairs(Variables.PlayerMaids) do pcall(function() m:DoCleaning() end); Variables.PlayerMaids[k] = nil end
         end
-        recheck()
 
-        return { Name = "PlayerESP", Stop = function()
-            stop_render()
-            for plr, _ in pairs(drawings_by_player) do clear_esp(plr) end
-            for _, plr in ipairs(services.Players:GetPlayers()) do remove_highlight(plr) end
-            maid:DoCleaning()
-        end }
+        return { Name = "PlayerESP", Stop = Stop }
     end
 end
