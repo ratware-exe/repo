@@ -1,4 +1,5 @@
 -- modules/universal/movement/speedhack.lua
+print('wow')
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
