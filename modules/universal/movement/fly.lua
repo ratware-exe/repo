@@ -261,7 +261,27 @@ do
         end
 
         -- [4] UI CREATION
-        -- UI is already created by loader.
+        local MovementGroupBox = UI.Tabs.Main:AddLeftGroupbox("Movement", "person-standing")
+        MovementGroupBox:AddDivider()
+		local FlightToggle = MovementGroupBox:AddToggle("FlightToggle", {
+			Text = "Fly",
+			Tooltip = "Makes you fly.", 
+			Default = false, 
+		})
+		UI.Toggles.FlightToggle:AddKeyPicker("FlightKeybind", {
+			Text = "Fly",
+			SyncToggleState = true,
+			Mode = "Toggle", 
+		})
+		MovementGroupBox:AddSlider("FlightSlider", {
+			Text = "Flight Speed",
+			Default = 250,
+			Min = 0,
+			Max = 500,
+			Rounding = 1,
+			Compact = true,
+			Tooltip = "Changes flight speed.", 
+		})
         
         -- [5] UI WIRING
         UI.Toggles.FlightToggle:OnChanged(function(enabledState)
