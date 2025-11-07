@@ -1,51 +1,51 @@
-print('new')
+-- "depedency/UIRegistry.lua",
 do
-  return function(UI)
+  return function(userinterface)
     -- Shared deps (your system)
     local Services   = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
     local Maid       = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
     local Signal     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
 
-    local M = Maid.new()
-    local G = (getgenv and getgenv()) or _G
+    local cleanupmaid = Maid.new()
+    local globalenvironment = (getgenv and getgenv()) or _G
 
     -- Expose Obsidian registries for this run (session-local convenience)
-    G.Toggles = UI.Toggles
-    G.Options = UI.Options
-    G.Library = UI.Library
+    globalenvironment.Toggles = userinterface.Toggles
+    globalenvironment.Options = userinterface.Options
+    globalenvironment.Library = userinterface.Library
 
     ---------------------------------------------------------------------------
     -- Multi-session manager
     ---------------------------------------------------------------------------
-    local Manager = rawget(G, "UISharedManager")
-    if not Manager then
-      Manager = { Sessions = {}, Active = nil }
-      rawset(G, "UISharedManager", Manager)
+    local manager = rawget(globalenvironment, "UISharedManager")
+    if not manager then
+      manager = { Sessions = {}, Active = nil }
+      rawset(globalenvironment, "UISharedManager", manager)
     end
 
     local function new_guid()
-      local guid
+      local uniqueid
       if Services and Services.HttpService then
-        pcall(function() guid = Services.HttpService:GenerateGUID(false) end)
+        pcall(function() uniqueid = Services.HttpService:GenerateGUID(false) end)
       end
-      return guid or ("sess_" .. tostring(math.random()) .. "_" .. tostring(os.clock()))
+      return uniqueid or ("sess_" .. tostring(math.random()) .. "_" .. tostring(os.clock()))
     end
 
     -- Back-compat upgrade
-    if rawget(G, "UIShared") and not Manager.__upgraded then
-      local legacy = G.UIShared
-      if type(legacy) == "table" and not Manager.Sessions.legacy then
-        Manager.Sessions.legacy = legacy
+    if rawget(globalenvironment, "UIShared") and not manager.__upgraded then
+      local legacyshareddata = globalenvironment.UIShared
+      if type(legacyshareddata) == "table" and not manager.Sessions.legacy then
+        manager.Sessions.legacy = legacyshareddata
       end
-      Manager.__upgraded = true
+      manager.__upgraded = true
     end
 
-    local SessionId = new_guid()
+    local sessionid = new_guid()
 
     -- Per-session state (dedupe per run)
-    local function new_session(id)
-      local s = {
-        Id = id,
+    local function new_session(identifier)
+      local session = {
+        Id = identifier,
         Elements = {
           label       = {},
           button      = {},
@@ -79,659 +79,659 @@ do
           groupboxes = setmetatable({}, { __mode = "k" }),
           hosts      = setmetatable({}, { __mode = "k" }),
         },
-        Find = function(self, kind, key)
-          kind = string.lower(kind)
-          local b = self.Elements[kind]
-          return b and b[key] or nil
+        Find = function(self, elementkind, storagekey)
+          elementkind = string.lower(elementkind)
+          local bucket = self.Elements[elementkind]
+          return bucket and bucket[storagekey] or nil
         end,
       }
-      return s
+      return session
     end
 
-    local Shared = new_session(SessionId)
-    Manager.Sessions[SessionId] = Shared
-    Manager.Active = SessionId
-    G.UIShared = Shared
-    G.UISharedSessionId = SessionId
+    local sharedsessionstate = new_session(sessionid)
+    manager.Sessions[sessionid] = sharedsessionstate
+    manager.Active = sessionid
+    globalenvironment.UIShared = sharedsessionstate
+    globalenvironment.UISharedSessionId = sessionid
 
     ---------------------------------------------------------------------------
     -- Utilities
     ---------------------------------------------------------------------------
-    local function clone(tbl)
-      if type(tbl) ~= "table" then return tbl end
-      local t = {}; for k, v in pairs(tbl) do t[k] = v end; return t
+    local function clone(tabletoclone)
+      if type(tabletoclone) ~= "table" then return tabletoclone end
+      local newtable = {}; for key, value in pairs(tabletoclone) do newtable[key] = value end; return newtable
     end
 
-    local function id_or_text_key(kind, id, cfg, textFallback)
-      if type(id) == "string" and id ~= "" then return id end
-      local tf = textFallback or (type(cfg) == "table" and cfg.Text)
-      if type(tf) == "string" and tf ~= "" then return "__name__:" .. tf end
+    local function id_or_text_key(elementkind, identifier, configuration, textfallback)
+      if type(identifier) == "string" and identifier ~= "" then return identifier end
+      local fallbacktext = textfallback or (type(configuration) == "table" and configuration.Text)
+      if type(fallbacktext) == "string" and fallbacktext ~= "" then return "__name__:" .. fallbacktext end
       return nil
     end
 
-    local function remember(kind, key, ref)
-      if not key then return end
-      Shared.Elements[kind][key] = ref
-      M:GiveTask(function()
-        if Shared.Elements[kind][key] == ref then
-          Shared.Elements[kind][key] = nil
+    local function remember(elementkind, storagekey, elementreference)
+      if not storagekey then return end
+      sharedsessionstate.Elements[elementkind][storagekey] = elementreference
+      cleanupmaid:GiveTask(function()
+        if sharedsessionstate.Elements[elementkind][storagekey] == elementreference then
+          sharedsessionstate.Elements[elementkind][storagekey] = nil
         end
       end)
     end
 
-    local function attach_OnChanged(ref, fn)
-      if type(fn) ~= "function" or type(ref) ~= "table" then return end
-      if type(ref.OnChanged) == "function" then
-        local ok, conn = pcall(function() return ref:OnChanged(fn) end)
-        if ok and conn then M:GiveTask(conn) end
+    local function attach_OnChanged(elementreference, callbackfunction)
+      if type(callbackfunction) ~= "function" or type(elementreference) ~= "table" then return end
+      if type(elementreference.OnChanged) == "function" then
+        local success, connection = pcall(function() return elementreference:OnChanged(callbackfunction) end)
+        if success and connection then cleanupmaid:GiveTask(connection) end
       end
     end
 
-    local function was_host_method_patched(host, method)
-      local map = Shared._patched.hosts[host]
-      if map and map[method] then return true end
-      map = map or {}; map[method] = true
-      Shared._patched.hosts[host] = map
+    local function was_host_method_patched(hostobject, methodname)
+      local patchedmethodsmap = sharedsessionstate._patched.hosts[hostobject]
+      if patchedmethodsmap and patchedmethodsmap[methodname] then return true end
+      patchedmethodsmap = patchedmethodsmap or {}; patchedmethodsmap[methodname] = true
+      sharedsessionstate._patched.hosts[hostobject] = patchedmethodsmap
       return false
     end
 
     ---------------------------------------------------------------------------
     -- Host patchers (KeyPicker / ColorPicker / Button)
     ---------------------------------------------------------------------------
-    local function patch_keypicker_host(host)
-      if type(host) ~= "table" or type(host.AddKeyPicker) ~= "function" or was_host_method_patched(host, "AddKeyPicker") then
+    local function patch_keypicker_host(hostobject)
+      if type(hostobject) ~= "table" or type(hostobject.AddKeyPicker) ~= "function" or was_host_method_patched(hostobject, "AddKeyPicker") then
         return
       end
-      local orig = host.AddKeyPicker
-      host.AddKeyPicker = function(self, id, cfg)
-        cfg = cfg or {}
-        local key = id_or_text_key("keybind", id, cfg, cfg.Text)
-        if key and Shared.Elements.keybind[key] then
-          local existing = Shared.Elements.keybind[key]
-          if type(cfg.Callback) == "function" and existing.OnClick then
-            local ok1, c1 = pcall(function() return existing:OnClick(cfg.Callback) end)
-            if ok1 and c1 then M:GiveTask(c1) end
+      local originalfunction = hostobject.AddKeyPicker
+      hostobject.AddKeyPicker = function(self, identifier, configuration)
+        configuration = configuration or {}
+        local storagekey = id_or_text_key("keybind", identifier, configuration, configuration.Text)
+        if storagekey and sharedsessionstate.Elements.keybind[storagekey] then
+          local existingelement = sharedsessionstate.Elements.keybind[storagekey]
+          if type(configuration.Callback) == "function" and existingelement.OnClick then
+            local success1, connection1 = pcall(function() return existingelement:OnClick(configuration.Callback) end)
+            if success1 and connection1 then cleanupmaid:GiveTask(connection1) end
           end
-          if type(cfg.ChangedCallback) == "function" and existing.OnChanged then
-            local ok2, c2 = pcall(function() return existing:OnChanged(cfg.ChangedCallback) end)
-            if ok2 and c2 then M:GiveTask(c2) end
+          if type(configuration.ChangedCallback) == "function" and existingelement.OnChanged then
+            local success2, connection2 = pcall(function() return existingelement:OnChanged(configuration.ChangedCallback) end)
+            if success2 and connection2 then cleanupmaid:GiveTask(connection2) end
           end
-          if type(cfg.Clicked) == "function" and existing.OnClick then
-            local ok3, c3 = pcall(function() return existing:OnClick(cfg.Clicked) end)
-            if ok3 and c3 then M:GiveTask(c3) end
+          if type(configuration.Clicked) == "function" and existingelement.OnClick then
+            local success3, connection3 = pcall(function() return existingelement:OnClick(configuration.Clicked) end)
+            if success3 and connection3 then cleanupmaid:GiveTask(connection3) end
           end
-          return existing
+          return existingelement
         end
-        local kb = orig(self, id, cfg)
-        if key then remember("keybind", key, kb) end
-        return kb
+        local keybindelement = originalfunction(self, identifier, configuration)
+        if storagekey then remember("keybind", storagekey, keybindelement) end
+        return keybindelement
       end
-      M:GiveTask(function() host.AddKeyPicker = orig end)
+      cleanupmaid:GiveTask(function() hostobject.AddKeyPicker = originalfunction end)
     end
 
-    local function patch_colorpicker_host(host)
-      if type(host) ~= "table" or type(host.AddColorPicker) ~= "function" or was_host_method_patched(host, "AddColorPicker") then
+    local function patch_colorpicker_host(hostobject)
+      if type(hostobject) ~= "table" or type(hostobject.AddColorPicker) ~= "function" or was_host_method_patched(hostobject, "AddColorPicker") then
         return
       end
-      local orig = host.AddColorPicker
-      host.AddColorPicker = function(self, id, cfg)
-        cfg = cfg or {}
-        local key = id_or_text_key("colorpicker", id, cfg, cfg.Title)
-        if key and Shared.Elements.colorpicker[key] then
-          attach_OnChanged(Shared.Elements.colorpicker[key], (cfg.Callback or cfg.Changed))
-          return Shared.Elements.colorpicker[key]
+      local originalfunction = hostobject.AddColorPicker
+      hostobject.AddColorPicker = function(self, identifier, configuration)
+        configuration = configuration or {}
+        local storagekey = id_or_text_key("colorpicker", identifier, configuration, configuration.Title)
+        if storagekey and sharedsessionstate.Elements.colorpicker[storagekey] then
+          attach_OnChanged(sharedsessionstate.Elements.colorpicker[storagekey], (configuration.Callback or configuration.Changed))
+          return sharedsessionstate.Elements.colorpicker[storagekey]
         end
-        local cp = orig(self, id, cfg)
-        if key then remember("colorpicker", key, cp) end
-        return cp
+        local colorpickerelement = originalfunction(self, identifier, configuration)
+        if storagekey then remember("colorpicker", storagekey, colorpickerelement) end
+        return colorpickerelement
       end
-      M:GiveTask(function() host.AddColorPicker = orig end)
+      cleanupmaid:GiveTask(function() hostobject.AddColorPicker = originalfunction end)
     end
 
-    local function patch_button_host(host)
-      if type(host) ~= "table" or type(host.AddButton) ~= "function" or was_host_method_patched(host, "AddButton") then
+    local function patch_button_host(hostobject)
+      if type(hostobject) ~= "table" or type(hostobject.AddButton) ~= "function" or was_host_method_patched(hostobject, "AddButton") then
         return
       end
-      local orig = host.AddButton
-      host.AddButton = function(self, arg1, arg2)
-        local cfg, text, func
-        if type(arg1) == "table" then
-          cfg = clone(arg1); text, func = cfg.Text, cfg.Func
+      local originalfunction = hostobject.AddButton
+      hostobject.AddButton = function(self, argument1, argument2)
+        local configuration, buttontext, buttonfunction
+        if type(argument1) == "table" then
+          configuration = clone(argument1); buttontext, buttonfunction = configuration.Text, configuration.Func
         else
-          text, func = arg1, arg2
+          buttontext, buttonfunction = argument1, argument2
         end
-        local key = id_or_text_key("button", nil, cfg, text)
-        if key and Shared.Elements.button[key] then
-          if type(func) == "function" then
-            local sig = Shared.ButtonSignals[key]
-            if sig then
-              local ok, conn = pcall(function() return sig:Connect(func) end)
-              if ok and conn then M:GiveTask(conn) end
+        local storagekey = id_or_text_key("button", nil, configuration, buttontext)
+        if storagekey and sharedsessionstate.Elements.button[storagekey] then
+          if type(buttonfunction) == "function" then
+            local signalinstance = sharedsessionstate.ButtonSignals[storagekey]
+            if signalinstance then
+              local success, connection = pcall(function() return signalinstance:Connect(buttonfunction) end)
+              if success and connection then cleanupmaid:GiveTask(connection) end
             end
           end
-          return Shared.Elements.button[key]
+          return sharedsessionstate.Elements.button[storagekey]
         end
-        local sig = Signal.new()
-        Shared.ButtonSignals[key or ("__btn__:" .. tostring(self))] = sig
-        M:GiveTask(function()
-          sig:Destroy()
-          Shared.ButtonSignals[key or ("__btn__:" .. tostring(self))] = nil
+        local signalinstance = Signal.new()
+        sharedsessionstate.ButtonSignals[storagekey or ("__btn__:" .. tostring(self))] = signalinstance
+        cleanupmaid:GiveTask(function()
+          signalinstance:Destroy()
+          sharedsessionstate.ButtonSignals[storagekey or ("__btn__:" .. tostring(self))] = nil
         end)
-        if type(func) == "function" then
-          local ok, conn = pcall(function() return sig:Connect(func) end)
-          if ok and conn then M:GiveTask(conn) end
+        if type(buttonfunction) == "function" then
+          local success, connection = pcall(function() return signalinstance:Connect(buttonfunction) end)
+          if success and connection then cleanupmaid:GiveTask(connection) end
         end
-        local function aggregator(...)
-          local args = table.pack(...)
-          local ok, err = pcall(function()
-            sig:Fire(table.unpack(args, 1, args.n))
+        local function eventaggregator(...)
+          local arguments = table.pack(...)
+          local success, errormessage = pcall(function()
+            signalinstance:Fire(table.unpack(arguments, 1, arguments.n))
           end)
-          if not ok then warn(err) end
+          if not success then warn(errormessage) end
         end
-        local el
-        if cfg then
-          cfg.Func = aggregator
-          el = orig(self, cfg)
+        local newelement
+        if configuration then
+          configuration.Func = eventaggregator
+          newelement = originalfunction(self, configuration)
         else
-          el = orig(self, text, aggregator)
+          newelement = originalfunction(self, buttontext, eventaggregator)
         end
-        if key then remember("button", key, el) end
-        patch_button_host(el) -- nested buttons
-        return el
+        if storagekey then remember("button", storagekey, newelement) end
+        patch_button_host(newelement) -- nested buttons
+        return newelement
       end
-      M:GiveTask(function() host.AddButton = orig end)
+      cleanupmaid:GiveTask(function() hostobject.AddButton = originalfunction end)
     end
 
     ---------------------------------------------------------------------------
     -- Groupbox patcher: wrap ALL adders per docs (and index by title)
     ---------------------------------------------------------------------------
-    local function already_patched_groupbox(box)
-      if Shared._patched.groupboxes[box] then return true end
-      Shared._patched.groupboxes[box] = true
+    local function already_patched_groupbox(groupbox)
+      if sharedsessionstate._patched.groupboxes[groupbox] then return true end
+      sharedsessionstate._patched.groupboxes[groupbox] = true
       return false
     end
 
-    local function patch_groupbox(box)
-      if type(box) ~= "table" or already_patched_groupbox(box) then return end
+    local function patch_groupbox(groupbox)
+      if type(groupbox) ~= "table" or already_patched_groupbox(groupbox) then return end
 
       -- Label
-      if type(box.AddLabel) == "function" then
-        local orig = box.AddLabel
-        box.AddLabel = function(self, a1, a2)
-          local id, cfg, text
-          if type(a1) == "string" and type(a2) == "table" then
-            id, cfg, text = a1, a2, a2.Text
-          elseif type(a1) == "table" then
-            id, cfg, text = nil, a1, a1.Text
+      if type(groupbox.AddLabel) == "function" then
+        local originalfunction = groupbox.AddLabel
+        groupbox.AddLabel = function(self, argument1, argument2)
+          local identifier, configuration, labeltext
+          if type(argument1) == "string" and type(argument2) == "table" then
+            identifier, configuration, labeltext = argument1, argument2, argument2.Text
+          elseif type(argument1) == "table" then
+            identifier, configuration, labeltext = nil, argument1, argument1.Text
           else
-            id, cfg, text = nil, { Text = a1, DoesWrap = a2 }, a1
+            identifier, configuration, labeltext = nil, { Text = argument1, DoesWrap = argument2 }, argument1
           end
-          local key = id_or_text_key("label", id, cfg, text)
-          if key and Shared.Elements.label[key] then
-            return Shared.Elements.label[key]
+          local storagekey = id_or_text_key("label", identifier, configuration, labeltext)
+          if storagekey and sharedsessionstate.Elements.label[storagekey] then
+            return sharedsessionstate.Elements.label[storagekey]
           end
-          local el = orig(self, a1, a2)
-          if key then remember("label", key, el) end
-          patch_keypicker_host(el)
-          patch_colorpicker_host(el)
-          return el
+          local newelement = originalfunction(self, argument1, argument2)
+          if storagekey then remember("label", storagekey, newelement) end
+          patch_keypicker_host(newelement)
+          patch_colorpicker_host(newelement)
+          return newelement
         end
-        M:GiveTask(function() box.AddLabel = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddLabel = originalfunction end)
       end
 
       -- Button
-      if type(box.AddButton) == "function" then
-        local orig = box.AddButton
-        box.AddButton = function(self, arg1, arg2)
-          local cfg, text, func
-          if type(arg1) == "table" then
-            cfg = clone(arg1); text, func = cfg.Text, cfg.Func
+      if type(groupbox.AddButton) == "function" then
+        local originalfunction = groupbox.AddButton
+        groupbox.AddButton = function(self, argument1, argument2)
+          local configuration, buttontext, buttonfunction
+          if type(argument1) == "table" then
+            configuration = clone(argument1); buttontext, buttonfunction = configuration.Text, configuration.Func
           else
-            text, func = arg1, arg2
+            buttontext, buttonfunction = argument1, argument2
           end
-          local key = id_or_text_key("button", nil, cfg, text)
-          if key and Shared.Elements.button[key] then
-            if type(func) == "function" then
-              local sig = Shared.ButtonSignals[key]
-              if sig then
-                local ok, conn = pcall(function() return sig:Connect(func) end)
-                if ok and conn then M:GiveTask(conn) end
+          local storagekey = id_or_text_key("button", nil, configuration, buttontext)
+          if storagekey and sharedsessionstate.Elements.button[storagekey] then
+            if type(buttonfunction) == "function" then
+              local signalinstance = sharedsessionstate.ButtonSignals[storagekey]
+              if signalinstance then
+                local success, connection = pcall(function() return signalinstance:Connect(buttonfunction) end)
+                if success and connection then cleanupmaid:GiveTask(connection) end
               end
             end
-            return Shared.Elements.button[key]
+            return sharedsessionstate.Elements.button[storagekey]
           end
-          local sig = Signal.new()
-          Shared.ButtonSignals[key or ("__btn__:" .. tostring(self))] = sig
-          M:GiveTask(function()
-            sig:Destroy()
-            Shared.ButtonSignals[key or ("__btn__:" .. tostring(self))] = nil
+          local signalinstance = Signal.new()
+          sharedsessionstate.ButtonSignals[storagekey or ("__btn__:" .. tostring(self))] = signalinstance
+          cleanupmaid:GiveTask(function()
+            signalinstance:Destroy()
+            sharedsessionstate.ButtonSignals[storagekey or ("__btn__:" .. tostring(self))] = nil
           end)
-          if type(func) == "function" then
-            local ok, conn = pcall(function() return sig:Connect(func) end)
-            if ok and conn then M:GiveTask(conn) end
+          if type(buttonfunction) == "function" then
+            local success, connection = pcall(function() return signalinstance:Connect(buttonfunction) end)
+            if success and connection then cleanupmaid:GiveTask(connection) end
           end
-          local function aggregator(...)
-            local args = table.pack(...)
-            local ok, err = pcall(function()
-              sig:Fire(table.unpack(args, 1, args.n))
+          local function eventaggregator(...)
+            local arguments = table.pack(...)
+            local success, errormessage = pcall(function()
+              signalinstance:Fire(table.unpack(arguments, 1, arguments.n))
             end)
-            if not ok then warn(err) end
+            if not success then warn(errormessage) end
           end
-          local el
-          if cfg then
-            cfg.Func = aggregator
-            el = orig(self, cfg)
+          local newelement
+          if configuration then
+            configuration.Func = eventaggregator
+            newelement = originalfunction(self, configuration)
           else
-            el = orig(self, text, aggregator)
+            newelement = originalfunction(self, buttontext, eventaggregator)
           end
-          if key then remember("button", key, el) end
-          patch_button_host(el)
-          return el
+          if storagekey then remember("button", storagekey, newelement) end
+          patch_button_host(newelement)
+          return newelement
         end
-        M:GiveTask(function() box.AddButton = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddButton = originalfunction end)
       end
 
       -- Toggle
-      if type(box.AddToggle) == "function" then
-        local orig = box.AddToggle
-        box.AddToggle = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("toggle", id, cfg, cfg.Text)
-          if key and Shared.Elements.toggle[key] then
-            attach_OnChanged(Shared.Elements.toggle[key], cfg.Callback)
-            return Shared.Elements.toggle[key]
+      if type(groupbox.AddToggle) == "function" then
+        local originalfunction = groupbox.AddToggle
+        groupbox.AddToggle = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("toggle", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.toggle[storagekey] then
+            attach_OnChanged(sharedsessionstate.Elements.toggle[storagekey], configuration.Callback)
+            return sharedsessionstate.Elements.toggle[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("toggle", key, el) end
-          patch_keypicker_host(el)
-          patch_colorpicker_host(el)
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("toggle", storagekey, newelement) end
+          patch_keypicker_host(newelement)
+          patch_colorpicker_host(newelement)
+          return newelement
         end
-        M:GiveTask(function() box.AddToggle = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddToggle = originalfunction end)
       end
 
       -- Checkbox
-      if type(box.AddCheckbox) == "function" then
-        local orig = box.AddCheckbox
-        box.AddCheckbox = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("checkbox", id, cfg, cfg.Text)
-          if key and Shared.Elements.checkbox[key] then
-            attach_OnChanged(Shared.Elements.checkbox[key], cfg.Callback)
-            return Shared.Elements.checkbox[key]
+      if type(groupbox.AddCheckbox) == "function" then
+        local originalfunction = groupbox.AddCheckbox
+        groupbox.AddCheckbox = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("checkbox", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.checkbox[storagekey] then
+            attach_OnChanged(sharedsessionstate.Elements.checkbox[storagekey], configuration.Callback)
+            return sharedsessionstate.Elements.checkbox[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("checkbox", key, el) end
-          patch_keypicker_host(el)
-          patch_colorpicker_host(el)
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("checkbox", storagekey, newelement) end
+          patch_keypicker_host(newelement)
+          patch_colorpicker_host(newelement)
+          return newelement
         end
-        M:GiveTask(function() box.AddCheckbox = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddCheckbox = originalfunction end)
       end
 
       -- Input
-      if type(box.AddInput) == "function" then
-        local orig = box.AddInput
-        box.AddInput = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("input", id, cfg, cfg.Text)
-          if key and Shared.Elements.input[key] then
-            attach_OnChanged(Shared.Elements.input[key], cfg.Callback)
-            return Shared.Elements.input[key]
+      if type(groupbox.AddInput) == "function" then
+        local originalfunction = groupbox.AddInput
+        groupbox.AddInput = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("input", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.input[storagekey] then
+            attach_OnChanged(sharedsessionstate.Elements.input[storagekey], configuration.Callback)
+            return sharedsessionstate.Elements.input[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("input", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("input", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddInput = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddInput = originalfunction end)
       end
 
       -- Slider
-      if type(box.AddSlider) == "function" then
-        local orig = box.AddSlider
-        box.AddSlider = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("slider", id, cfg, cfg.Text)
-          if key and Shared.Elements.slider[key] then
-            attach_OnChanged(Shared.Elements.slider[key], cfg.Callback)
-            return Shared.Elements.slider[key]
+      if type(groupbox.AddSlider) == "function" then
+        local originalfunction = groupbox.AddSlider
+        groupbox.AddSlider = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("slider", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.slider[storagekey] then
+            attach_OnChanged(sharedsessionstate.Elements.slider[storagekey], configuration.Callback)
+            return sharedsessionstate.Elements.slider[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("slider", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("slider", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddSlider = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddSlider = originalfunction end)
       end
 
       -- Dropdown
-      if type(box.AddDropdown) == "function" then
-        local orig = box.AddDropdown
-        box.AddDropdown = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("dropdown", id, cfg, cfg.Text)
-          if key and Shared.Elements.dropdown[key] then
-            attach_OnChanged(Shared.Elements.dropdown[key], cfg.Callback)
-            return Shared.Elements.dropdown[key]
+      if type(groupbox.AddDropdown) == "function" then
+        local originalfunction = groupbox.AddDropdown
+        groupbox.AddDropdown = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("dropdown", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.dropdown[storagekey] then
+            attach_OnChanged(sharedsessionstate.Elements.dropdown[storagekey], configuration.Callback)
+            return sharedsessionstate.Elements.dropdown[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("dropdown", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("dropdown", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddDropdown = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddDropdown = originalfunction end)
       end
 
       -- Divider
-      if type(box.AddDivider) == "function" then
-        local orig = box.AddDivider
-        box.AddDivider = function(self, ...)
-          local el = orig(self, ...)
-          local guid = Services.HttpService and Services.HttpService:GenerateGUID(false) or tostring(el)
-          remember("divider", guid, el)
-          return el
+      if type(groupbox.AddDivider) == "function" then
+        local originalfunction = groupbox.AddDivider
+        groupbox.AddDivider = function(self, ...)
+          local newelement = originalfunction(self, ...)
+          local uniqueid = Services.HttpService and Services.HttpService:GenerateGUID(false) or tostring(newelement)
+          remember("divider", uniqueid, newelement)
+          return newelement
         end
-        M:GiveTask(function() box.AddDivider = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddDivider = originalfunction end)
       end
 
       -- Viewport
-      if type(box.AddViewport) == "function" then
-        local orig = box.AddViewport
-        box.AddViewport = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("viewport", id, cfg, cfg.Title)
-          if key and Shared.Elements.viewport[key] then
-            return Shared.Elements.viewport[key]
+      if type(groupbox.AddViewport) == "function" then
+        local originalfunction = groupbox.AddViewport
+        groupbox.AddViewport = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("viewport", identifier, configuration, configuration.Title)
+          if storagekey and sharedsessionstate.Elements.viewport[storagekey] then
+            return sharedsessionstate.Elements.viewport[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("viewport", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("viewport", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddViewport = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddViewport = originalfunction end)
       end
 
       -- Image
-      if type(box.AddImage) == "function" then
-        local orig = box.AddImage
-        box.AddImage = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("image", id, cfg, cfg.Text)
-          if key and Shared.Elements.image[key] then
-            return Shared.Elements.image[key]
+      if type(groupbox.AddImage) == "function" then
+        local originalfunction = groupbox.AddImage
+        groupbox.AddImage = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("image", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.image[storagekey] then
+            return sharedsessionstate.Elements.image[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("image", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("image", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddImage = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddImage = originalfunction end)
       end
 
       -- Video
-      if type(box.AddVideo) == "function" then
-        local orig = box.AddVideo
-        box.AddVideo = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("video", id, cfg, cfg.Text)
-          if key and Shared.Elements.video[key] then
-            return Shared.Elements.video[key]
+      if type(groupbox.AddVideo) == "function" then
+        local originalfunction = groupbox.AddVideo
+        groupbox.AddVideo = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("video", identifier, configuration, configuration.Text)
+          if storagekey and sharedsessionstate.Elements.video[storagekey] then
+            return sharedsessionstate.Elements.video[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("video", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("video", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddVideo = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddVideo = originalfunction end)
       end
 
       -- UI Passthrough
-      if type(box.AddUIPassthrough) == "function" then
-        local orig = box.AddUIPassthrough
-        box.AddUIPassthrough = function(self, id, cfg)
-          cfg = cfg or {}
-          local key = id_or_text_key("uipass", id, cfg, cfg.Title)
-          if key and Shared.Elements.uipass[key] then
-            return Shared.Elements.uipass[key]
+      if type(groupbox.AddUIPassthrough) == "function" then
+        local originalfunction = groupbox.AddUIPassthrough
+        groupbox.AddUIPassthrough = function(self, identifier, configuration)
+          configuration = configuration or {}
+          local storagekey = id_or_text_key("uipass", identifier, configuration, configuration.Title)
+          if storagekey and sharedsessionstate.Elements.uipass[storagekey] then
+            return sharedsessionstate.Elements.uipass[storagekey]
           end
-          local el = orig(self, id, cfg)
-          if key then remember("uipass", key, el) end
-          return el
+          local newelement = originalfunction(self, identifier, configuration)
+          if storagekey then remember("uipass", storagekey, newelement) end
+          return newelement
         end
-        M:GiveTask(function() box.AddUIPassthrough = orig end)
+        cleanupmaid:GiveTask(function() groupbox.AddUIPassthrough = originalfunction end)
       end
 
       -- Index by title
-      if type(box.Title) == "string" and box.Title ~= "" then
-        remember("groupbox", "__name__:" .. box.Title, box)
+      if type(groupbox.Title) == "string" and groupbox.Title ~= "" then
+        remember("groupbox", "__name__:" .. groupbox.Title, groupbox)
       end
     end
 
     ---------------------------------------------------------------------------
     -- Tabbox patcher (AddTab dedupe → Groupbox)
     ---------------------------------------------------------------------------
-    local function already_patched_tabbox(tb)
-      if Shared._patched.tabboxes[tb] then return true end
-      Shared._patched.tabboxes[tb] = true
+    local function already_patched_tabbox(tabbox)
+      if sharedsessionstate._patched.tabboxes[tabbox] then return true end
+      sharedsessionstate._patched.tabboxes[tabbox] = true
       return false
     end
 
-    local function patch_tabbox(tb)
-      if type(tb) ~= "table" or already_patched_tabbox(tb) then return end
+    local function patch_tabbox(tabbox)
+      if type(tabbox) ~= "table" or already_patched_tabbox(tabbox) then return end
 
-      if type(tb.AddTab) == "function" then
-        local orig = tb.AddTab
-        tb.AddTab = function(self, title)
-          local map = Shared._tabboxTabs[self]
-          if not map then map = {}; Shared._tabboxTabs[self] = map end
+      if type(tabbox.AddTab) == "function" then
+        local originalfunction = tabbox.AddTab
+        tabbox.AddTab = function(self, title)
+          local tabmap = sharedsessionstate._tabboxTabs[self]
+          if not tabmap then tabmap = {}; sharedsessionstate._tabboxTabs[self] = tabmap end
 
           if type(title) == "string" and title ~= "" then
-            local existing = map[title]
-            if existing then
-              patch_groupbox(existing)
-              return existing
+            local existingelement = tabmap[title]
+            if existingelement then
+              patch_groupbox(existingelement)
+              return existingelement
             end
           end
 
-          local gb = orig(self, title)
-          patch_groupbox(gb)
+          local groupboxelement = originalfunction(self, title)
+          patch_groupbox(groupboxelement)
 
           if type(title) == "string" and title ~= "" then
-            map[title] = gb
-            if not Shared.Elements.groupbox["__name__:" .. title] then
-              remember("groupbox", "__name__:" .. title, gb)
+            tabmap[title] = groupboxelement
+            if not sharedsessionstate.Elements.groupbox["__name__:" .. title] then
+              remember("groupbox", "__name__:" .. title, groupboxelement)
             end
           end
-          return gb
+          return groupboxelement
         end
-        M:GiveTask(function() tb.AddTab = orig end)
+        cleanupmaid:GiveTask(function() tabbox.AddTab = originalfunction end)
       end
 
-      if type(tb.Title) == "string" and tb.Title ~= "" then
-        remember("tabbox", "__name__:" .. tb.Title, tb)
+      if type(tabbox.Title) == "string" and tabbox.Title ~= "" then
+        remember("tabbox", "__name__:" .. tabbox.Title, tabbox)
       end
     end
 
     ---------------------------------------------------------------------------
     -- Tabs patchers (via CANONICAL proxy)
     ---------------------------------------------------------------------------
-    local function already_patched_tab(tab)
-      if Shared._patched.tabs[tab] then return true end
-      Shared._patched.tabs[tab] = true
+    local function already_patched_tab(tabobject)
+      if sharedsessionstate._patched.tabs[tabobject] then return true end
+      sharedsessionstate._patched.tabs[tabobject] = true
       return false
     end
 
-    local function per_tab_maps(tab)
-      local gmap = Shared._perTab.groupboxes[tab]
-      if not gmap then gmap = {}; Shared._perTab.groupboxes[tab] = gmap end
-      local tbmap = Shared._perTab.tabboxes[tab]
-      if not tbmap then tbmap = {}; Shared._perTab.tabboxes[tab] = tbmap end
-      return gmap, tbmap
+    local function per_tab_maps(tabobject)
+      local groupboxmap = sharedsessionstate._perTab.groupboxes[tabobject]
+      if not groupboxmap then groupboxmap = {}; sharedsessionstate._perTab.groupboxes[tabobject] = groupboxmap end
+      local tabboxmap = sharedsessionstate._perTab.tabboxes[tabobject]
+      if not tabboxmap then tabboxmap = {}; sharedsessionstate._perTab.tabboxes[tabobject] = tabboxmap end
+      return groupboxmap, tabboxmap
     end
 
-    local function patch_tab(tab, name)
-      if type(tab) ~= "table" or already_patched_tab(tab) then return end
-      local gbmap, tbmap = per_tab_maps(tab)
+    local function patch_tab(tabobject, tabname)
+      if type(tabobject) ~= "table" or already_patched_tab(tabobject) then return end
+      local groupboxmap, tabboxmap = per_tab_maps(tabobject)
 
       -- AddLeftGroupbox(title, icon?)
-      if type(tab.AddLeftGroupbox) == "function" then
-        local orig = tab.AddLeftGroupbox
-        tab.AddLeftGroupbox = function(self, title, icon, ...)
+      if type(tabobject.AddLeftGroupbox) == "function" then
+        local originalfunction = tabobject.AddLeftGroupbox
+        tabobject.AddLeftGroupbox = function(self, title, icon, ...)
           if type(title) == "string" and title ~= "" then
-            local existing = gbmap[title]
-            if existing then
-              patch_groupbox(existing)
-              return existing
+            local existingelement = groupboxmap[title]
+            if existingelement then
+              patch_groupbox(existingelement)
+              return existingelement
             end
           end
-          local gb = orig(self, title, icon, ...)
-          patch_groupbox(gb)
+          local groupboxelement = originalfunction(self, title, icon, ...)
+          patch_groupbox(groupboxelement)
           if type(title) == "string" and title ~= "" then
-            gbmap[title] = gb
-            if not Shared.Elements.groupbox["__name__:" .. title] then
-              remember("groupbox", "__name__:" .. title, gb)
+            groupboxmap[title] = groupboxelement
+            if not sharedsessionstate.Elements.groupbox["__name__:" .. title] then
+              remember("groupbox", "__name__:" .. title, groupboxelement)
             end
           end
-          return gb
+          return groupboxelement
         end
-        M:GiveTask(function() tab.AddLeftGroupbox = orig end)
+        cleanupmaid:GiveTask(function() tabobject.AddLeftGroupbox = originalfunction end)
       end
 
       -- AddRightGroupbox(title, icon?)
-      if type(tab.AddRightGroupbox) == "function" then
-        local orig = tab.AddRightGroupbox
-        tab.AddRightGroupbox = function(self, title, icon, ...)
+      if type(tabobject.AddRightGroupbox) == "function" then
+        local originalfunction = tabobject.AddRightGroupbox
+        tabobject.AddRightGroupbox = function(self, title, icon, ...)
           if type(title) == "string" and title ~= "" then
-            local existing = gbmap[title]
-            if existing then
-              patch_groupbox(existing)
-              return existing
+            local existingelement = groupboxmap[title]
+            if existingelement then
+              patch_groupbox(existingelement)
+              return existingelement
             end
           end
-          local gb = orig(self, title, icon, ...)
-          patch_groupbox(gb)
+          local groupboxelement = originalfunction(self, title, icon, ...)
+          patch_groupbox(groupboxelement)
           if type(title) == "string" and title ~= "" then
-            gbmap[title] = gb
-            if not Shared.Elements.groupbox["__name__:" .. title] then
-              remember("groupbox", "__name__:" .. title, gb)
+            groupboxmap[title] = groupboxelement
+            if not sharedsessionstate.Elements.groupbox["__name__:" .. title] then
+              remember("groupbox", "__name__:" .. title, groupboxelement)
             end
           end
-          return gb
+          return groupboxelement
         end
-        M:GiveTask(function() tab.AddRightGroupbox = orig end)
+        cleanupmaid:GiveTask(function() tabobject.AddRightGroupbox = originalfunction end)
       end
 
       -- AddLeftTabbox(title, icon?)
-      if type(tab.AddLeftTabbox) == "function" then
-        local orig = tab.AddLeftTabbox
-        tab.AddLeftTabbox = function(self, title, icon, ...)
+      if type(tabobject.AddLeftTabbox) == "function" then
+        local originalfunction = tabobject.AddLeftTabbox
+        tabobject.AddLeftTabbox = function(self, title, icon, ...)
           if type(title) == "string" and title ~= "" then
-            local existing = tbmap[title]
-            if existing then
-              patch_tabbox(existing)
-              return existing
+            local existingelement = tabboxmap[title]
+            if existingelement then
+              patch_tabbox(existingelement)
+              return existingelement
             end
           end
-          local tb = orig(self, title, icon, ...)
-          patch_tabbox(tb)
+          local tabboxelement = originalfunction(self, title, icon, ...)
+          patch_tabbox(tabboxelement)
           if type(title) == "string" and title ~= "" then
-            tbmap[title] = tb
-            if not Shared.Elements.tabbox["__name__:" .. title] then
-              remember("tabbox", "__name__:" .. title, tb)
+            tabboxmap[title] = tabboxelement
+            if not sharedsessionstate.Elements.tabbox["__name__:" .. title] then
+              remember("tabbox", "__name__:" .. title, tabboxelement)
             end
           end
-          return tb
+          return tabboxelement
         end
-        M:GiveTask(function() tab.AddLeftTabbox = orig end)
+        cleanupmaid:GiveTask(function() tabobject.AddLeftTabbox = originalfunction end)
       end
 
       -- AddRightTabbox(title, icon?)
-      if type(tab.AddRightTabbox) == "function" then
-        local orig = tab.AddRightTabbox
-        tab.AddRightTabbox = function(self, title, icon, ...)
+      if type(tabobject.AddRightTabbox) == "function" then
+        local originalfunction = tabobject.AddRightTabbox
+        tabobject.AddRightTabbox = function(self, title, icon, ...)
           if type(title) == "string" and title ~= "" then
-            local existing = tbmap[title]
-            if existing then
-              patch_tabbox(existing)
-              return existing
+            local existingelement = tabboxmap[title]
+            if existingelement then
+              patch_tabbox(existingelement)
+              return existingelement
             end
           end
-          local tb = orig(self, title, icon, ...)
-          patch_tabbox(tb)
+          local tabboxelement = originalfunction(self, title, icon, ...)
+          patch_tabbox(tabboxelement)
           if type(title) == "string" and title ~= "" then
-            tbmap[title] = tb
-            if not Shared.Elements.tabbox["__name__:" .. title] then
-              remember("tabbox", "__name__:" .. title, tb)
+            tabboxmap[title] = tabboxelement
+            if not sharedsessionstate.Elements.tabbox["__name__:" .. title] then
+              remember("tabbox", "__name__:" .. title, tabboxelement)
             end
           end
-          return tb
+          return tabboxelement
         end
-        M:GiveTask(function() tab.AddRightTabbox = orig end)
+        cleanupmaid:GiveTask(function() tabobject.AddRightTabbox = originalfunction end)
       end
 
-      if type(name) == "string" and name ~= "" then
-        remember("tab", "__name__:" .. name, tab)
+      if type(tabname) == "string" and tabname ~= "" then
+        remember("tab", "__name__:" .. tabname, tabobject)
       end
     end
 
     -- === Canonical Tabs Proxy ===
-    local RawTabs = UI.Tabs
-    local CanonTabs = {}
-    local canon_mt = {}
+    local rawtabs = userinterface.Tabs
+    local canonicaltabs = {}
+    local canonicalmetatable = {}
 
-    canon_mt.__index = function(_, k)
-      local cached = Shared._canonicalTabs[k]
-      if cached then return cached end
-      local raw = RawTabs and RawTabs[k]
-      if raw == nil then return nil end
-      if type(raw) == "table" then
-        patch_tab(raw, k)
+    canonicalmetatable.__index = function(_, key)
+      local cachedelement = sharedsessionstate._canonicalTabs[key]
+      if cachedelement then return cachedelement end
+      local rawelement = rawtabs and rawtabs[key]
+      if rawelement == nil then return nil end
+      if type(rawelement) == "table" then
+        patch_tab(rawelement, key)
       end
-      Shared._canonicalTabs[k] = raw
-      return raw
+      sharedsessionstate._canonicalTabs[key] = rawelement
+      return rawelement
     end
 
-    canon_mt.__pairs = function()
-      local keys = {}
-      for k in pairs(RawTabs or {}) do table.insert(keys, k) end
-      local i = 0
+    canonicalmetatable.__pairs = function()
+      local keylist = {}
+      for key in pairs(rawtabs or {}) do table.insert(keylist, key) end
+      local index = 0
       return function()
-        i = i + 1
-        local k = keys[i]
-        if not k then return end
-        return k, CanonTabs[k]
+        index = index + 1
+        local key = keylist[index]
+        if not key then return end
+        return key, canonicaltabs[key]
       end
     end
 
-    canon_mt.__len = function()
-      local n = 0
-      for _ in pairs(RawTabs or {}) do n = n + 1 end
-      return n
+    canonicalmetatable.__len = function()
+      local count = 0
+      for _ in pairs(rawtabs or {}) do count = count + 1 end
+      return count
     end
 
-    setmetatable(CanonTabs, canon_mt)
+    setmetatable(canonicaltabs, canonicalmetatable)
 
     -- swap tabs reference to the canonical proxy
-    local OriginalTabs = UI.Tabs
-    UI.Tabs = CanonTabs
-    G.Tabs  = CanonTabs
+    local originaltabs = userinterface.Tabs
+    userinterface.Tabs = canonicaltabs
+    globalenvironment.Tabs  = canonicaltabs
 
     -- touch each existing key once to patch & cache
-    for name in pairs(OriginalTabs or {}) do
-      local _ = CanonTabs[name]
+    for tabname in pairs(originaltabs or {}) do
+      local _ = canonicaltabs[tabname]
     end
 
     ---------------------------------------------------------------------------
     -- Session Stop (unload)
     ---------------------------------------------------------------------------
     local function Stop()
-      UI.Tabs = OriginalTabs
-      G.Tabs  = UI.Tabs
-      M:DoCleaning()
-      local mgr = rawget(G, "UISharedManager")
-      if mgr and mgr.Sessions then
-        mgr.Sessions[SessionId] = nil
-        if mgr.Active == SessionId then
-          local nextId
-          for id, _ in pairs(mgr.Sessions) do nextId = id; break end
-          mgr.Active = nextId
-          G.UIShared = nextId and mgr.Sessions[nextId] or nil
-          G.UISharedSessionId = nextId
+      userinterface.Tabs = originaltabs
+      globalenvironment.Tabs  = userinterface.Tabs
+      cleanupmaid:DoCleaning()
+      local managerinstance = rawget(globalenvironment, "UISharedManager")
+      if managerinstance and managerinstance.Sessions then
+        managerinstance.Sessions[sessionid] = nil
+        if managerinstance.Active == sessionid then
+          local nextsessionid
+          for loopsessionid, _ in pairs(managerinstance.Sessions) do nextsessionid = loopsessionid; break end
+          managerinstance.Active = nextsessionid
+          globalenvironment.UIShared = nextsessionid and managerinstance.Sessions[nextsessionid] or nil
+          globalenvironment.UISharedSessionId = nextsessionid
         end
       end
     end
