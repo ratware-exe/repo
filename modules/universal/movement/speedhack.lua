@@ -1,5 +1,4 @@
 -- modules/universal/movement/speedhack.lua
-print('wow')
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
@@ -13,9 +12,7 @@ do
             Maids = { [ModuleName] = Maid.new() },
             RunFlag = false, -- Corresponds to 'Enabled' in old script
             
-            -- Speedhack Vars
-            WaitRandomMin = 1,
-            WaitRandomMax = 3,
+            -- Speedhack Vars (from original)
             DefaultDt = 0.016,
             TweenDtMultiplier = 1.5,
             TweenMin = 0.005,
@@ -56,7 +53,7 @@ do
         end
 
         local function onRenderStepped(dt)
-            if not Variables.RunFlag then return end
+            if not Variables.RunFlag then return end -- This logic is now correct
 
             secureCall(function()
                 local LocalPlayer = RbxService.Players.LocalPlayer
@@ -133,13 +130,14 @@ do
 
         local function Stop()
             if not Variables.RunFlag then return end
+            Variables.RunFlag = false -- This is handled by the maid task, but set explicitly
+            
             -- DoCleaning will set RunFlag to false, disconnect RenderStepped, and call cancelTween
             Variables.Maids[ModuleName]:DoCleaning()
         end
 
         -- [4] UI CREATION
         local MovementGroupBox = UI.Tabs.Main:AddLeftGroupbox("Movement", "person-standing")
-        
         local SpeedhackToggle = MovementGroupBox:AddToggle("SpeedhackToggle", {
 			Text = "Speedhack",
 			Tooltip = "Makes your extremely fast.", 
@@ -160,10 +158,10 @@ do
 			Tooltip = "Changes speedhack speed.", 
 		})
         
-        -- [5] UI WIRING
+        -- [5] UI WIRING (CORRECTED)
         UI.Toggles.SpeedhackToggle:OnChanged(function(enabledState)
+            -- This is now correct. Start/Stop handle the RunFlag.
             if enabledState then 
-                task.wait(math.random(Variables.WaitRandomMin, Variables.WaitRandomMax)) -- From original script
                 Start() 
             else 
                 Stop() 
@@ -181,12 +179,10 @@ do
         end)
         
         -- Seed default values from UI
-        Variables.RunFlag = UI.Toggles.SpeedhackToggle.Value
         Variables.DefaultSpeed = tonumber(UI.Options.SpeedhackSlider.Value) or 250
         
         -- Start if already enabled
-        if Variables.RunFlag then
-            task.wait(math.random(Variables.WaitRandomMin, Variables.WaitRandomMax)) -- From original script
+        if UI.Toggles.SpeedhackToggle.Value then
             Start()
         end
 
