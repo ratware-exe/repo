@@ -1,62 +1,69 @@
 -- modules/universal/noclip.lua
 do
-    return function(ui)
+    return function(UI)
         local services = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
         local Maid     = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
-        local maid = Maid.new()
-        local running = false
-        local original = setmetatable({}, { __mode = "k" })
+        local variables = {
+            maids = { noclip = Maid.new() },
+            noclip = false,
+        }
 
-        local function set_noclip(state)
-            local player = services.Players.LocalPlayer
-            local character = player and player.Character
-            if not character then return end
-            for _, inst in ipairs(character:GetDescendants()) do
-                if inst:IsA("BasePart") and inst.CanCollide ~= not state then
-                    if original[inst] == nil then original[inst] = inst.CanCollide end
-                    inst.CanCollide = not state
-                end
+        -- step loop: HRP no-collide (verbatim intent)
+        local stepped = services.RunService.Stepped:Connect(function()
+            if not variables.noclip then return end
+            local lp = services.Players.LocalPlayer
+            local ch = lp and lp.Character
+            local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                pcall(function() hrp.CanCollide = false end)
             end
-        end
-
-        local function restore()
-            for part, can in pairs(original) do
-                if part then pcall(function() part.CanCollide = can end) end
-                original[part] = nil
-            end
-        end
-
-        local function start()
-            if running then return end
-            running = true
-            local stepped = services.RunService.Stepped:Connect(function()
-                if not running then return end
-                set_noclip(true)
-            end)
-            maid:GiveTask(stepped)
-            maid:GiveTask(function() running = false end)
-        end
-
-        local function stop()
-            if not running then return end
-            running = false
-            maid:DoCleaning()
-            restore()
-        end
-
-        -- UI
-        local movement_tab = ui.Tabs.Main or ui.Tabs.Misc
-        local group = movement_tab:AddLeftGroupbox("Movement", "person-standing")
-        group:AddToggle("NoclipToggle", {
-            Text = "No Clip",
-            Tooltip = "Makes you go through objects.",
-            Default = false,
-        })
-        ui.Toggles.NoclipToggle:OnChanged(function(enabled)
-            if enabled then start() else stop() end
         end)
+        variables.maids.noclip:GiveTask(stepped)
 
-        return { Name = "NoClip", Stop = stop }
+        -- UI (verbatim IDs)
+        do
+            local tab = UI.Tabs.Main or UI.Tabs.Misc
+            local group = tab:AddLeftGroupbox("Movement", "person-standing")
+            group:AddToggle("NoclipToggle", {
+                Text = "No Clip",
+                Tooltip = "Makes you go through objects.",
+                DisabledTooltip = "Feature Disabled!",
+                Default = false,
+                Disabled = false,
+                Visible = true,
+                Risky = false,
+            })
+            UI.Toggles.NoclipToggle:AddKeyPicker("NoclipKeybind", {
+                Text = "No Clip",
+                SyncToggleState = true,
+                Mode = "Toggle",
+                NoUI = false,
+            })
+        end
+
+        -- OnChanged (verbatim)
+        if UI.Toggles and UI.Toggles.NoclipToggle then
+            UI.Toggles.NoclipToggle:OnChanged(function(enabled)
+                variables.noclip = enabled and true or false
+                if not enabled then
+                    local lp = services.Players.LocalPlayer
+                    local ch = lp and lp.Character
+                    local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+                    if hrp then hrp.CanCollide = true end
+                end
+            end)
+        end
+
+        local function Stop()
+            variables.noclip = false
+            variables.maids.noclip:DoCleaning()
+            local lp = services.Players.LocalPlayer
+            local ch = lp and lp.Character
+            local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+            if hrp then pcall(function() hrp.CanCollide = true end) end
+        end
+
+        return { Name = "Noclip", Stop = Stop }
     end
 end
