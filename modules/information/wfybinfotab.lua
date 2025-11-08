@@ -1,4 +1,4 @@
--- "modules/information/wfybinfotab.lua"
+-- "modules/information/wfybinfotab.lua",
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
