@@ -262,7 +262,6 @@ do
 
         -- [4] UI CREATION
         local MovementGroupBox = UI.Tabs.Main:AddLeftGroupbox("Movement", "person-standing")
-        MovementGroupBox:AddDivider()
 		local FlightToggle = MovementGroupBox:AddToggle("FlightToggle", {
 			Text = "Fly",
 			Tooltip = "Makes you fly.", 
