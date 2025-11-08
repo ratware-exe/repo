@@ -21,11 +21,6 @@ do
 			CannonOriginalWaterLevel = nil,
 			CannonHardPatchApplied = false,
 			CannonPatchedFunctions = {},
-
-			-- Desync
-			DesyncEnabled = false,
-			CharacterParts = {},
-			DesyncThread = nil,
 		}
 
 		-- [3] CORE LOGIC
@@ -154,101 +149,15 @@ do
 			if Variables.notify then Variables.notify(("Underwater Cannons (Hard): [OFF] (%d restored)."):format(restored)) end
 		end
 
-		-- == Desync Logic (Refactored) ==
-		local function UpdateCharacterParts()
-			table.clear(Variables.CharacterParts)
-			local character = LocalPlayer.Character
-			if not character then return end
-
-			for _, part in ipairs(character:GetDescendants()) do
-				if part:IsA("BasePart") then
-					table.insert(Variables.CharacterParts, part)
-				end
-			end
-		end
-
-		local function DesyncLoop()
-			while Variables.DesyncEnabled do
-				if #Variables.CharacterParts == 0 then
-					UpdateCharacterParts() -- Find parts
-				end
-				
-				for _, part in ipairs(Variables.CharacterParts) do
-					if part and part.Parent then -- Check if part is still valid
-						part.Anchored = true
-						part.CanCollide = false
-						part:SetNetworkOwner(nil)
-					else
-						-- Part is invalid, force a repopulate on next loop
-						table.clear(Variables.CharacterParts)
-						break
-					end
-				end
-				task.wait(0.1) -- Polling rate
-			end
-		end
-
-		function Variables.EnableDesync()
-			if Variables.DesyncEnabled then return end
-			Variables.DesyncEnabled = true
-			notify("Desync: [ON].")
-
-			UpdateCharacterParts() -- Get initial parts
-
-			-- Start the loop
-			Variables.DesyncThread = task.spawn(DesyncLoop)
-			
-			-- Hook to respawns to update parts list
-			local maid = Variables.Maids[ModuleName]
-			maid:GiveTask(LocalPlayer.CharacterAdded:Connect(function(newCharacter)
-				task.wait(0.5) -- Wait for parts to load
-				UpdateCharacterParts() -- Update the list for the loop to use
-			end), "DesyncCharacterAdded")
-		end
-
-		function Variables.DisableDesync()
-			if not Variables.DesyncEnabled then return end
-			Variables.DesyncEnabled = false
-			notify("Desync: [OFF].")
-
-			-- Stop the loop
-			if Variables.DesyncThread then
-				task.cancel(Variables.DesyncThread)
-				Variables.DesyncThread = nil
-			end
-
-			-- Remove the respawn hook
-			Variables.Maids[ModuleName]:Clean("DesyncCharacterAdded")
-		end
-
-		function Variables.DisableDesync()
-			if not Variables.DesyncEnabled then return end
-			Variables.DesyncEnabled = false
-			notify("Desync: [OFF].")
-
-			-- Stop the loop
-			local threadToCancel = Variables.DesyncThread -- Get local reference
-			Variables.DesyncThread = nil -- Set to nil *before* cancelling to prevent race condition
-
-			if threadToCancel then
-				task.cancel(threadToCancel) -- Cancel the local reference
-			end
-
-			-- Remove the respawn hook
-			Variables.Maids[ModuleName]:Clean("DesyncCharacterAdded")
-		end
-
 		-- == Main Control Functions ==
 		local function EnableAllFeatures()
 			Variables.ApplyUnderwaterCannonsPatch()
 			Variables.ApplyUnderwaterCannonsHardPatch()
-			Variables.EnableDesync()
 		end
 
 		local function DisableAllFeatures()
 			Variables.RevertUnderwaterCannonsHardPatch()
 			Variables.RevertUnderwaterCannonsPatch()
-			Variables.DisableDesync()
 		end
 
 		-- == Module Stop Function ==
@@ -263,7 +172,7 @@ do
 		
 		local NoWaterHeightToggle = RemovalGroupBox:AddToggle("NoWaterHeightToggle", {
 			Text = "Fire Underwater",
-			Tooltip = "Fire weapons underwater & desyncs physics.",
+			Tooltip = "Fire weapons underwater.",
 			DisabledTooltip = "Feature Disabled!",
 			Default = false,
 			Disabled = false,
