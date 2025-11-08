@@ -1,4 +1,4 @@
--- "modules/wfyb/fireanyangle.lua",
+-- "modules/wfyb/bypass/fireanyangle.lua",
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
