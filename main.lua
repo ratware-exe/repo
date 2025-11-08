@@ -24,7 +24,7 @@ local featurePaths = {
     "modules/wfyb/bypass/infinitestamina.lua",
     "modules/wfyb/bypass/underwater.lua",
     "modules/wfyb/bypass/fireanyangle.lua",
-    "modules/wfyb/bypass/firethroughwalls.lua",
+    "modules/wfyb/bypass/firethroughwall.lua",
     "modules/universal/rage/attachtoback.lua",
     "modules/universal/travel/teleportcframe.lua",
     "modules/universal/travel/teleportplayer.lua",
