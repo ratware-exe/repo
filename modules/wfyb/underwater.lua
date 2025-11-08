@@ -147,7 +147,7 @@ do
 					mod[item.methodName] = item.original
 					restored += 1
 				end
-				table.remove(list, i)
+				table.remove(list, i) -- Use table.remove to safely remove
 			end
 
 			Variables.CannonHardPatchApplied = false
@@ -221,6 +221,12 @@ do
 			Variables.Maids[ModuleName]:Clean("DesyncCharacterAdded")
 
 			-- Manually unanchor all parts *one last time*
+			if #Variables.CharacterParts == 0 then
+				-- If respawned while disabled, parts list might be empty
+				-- Try to get them one last time
+				UpdateCharacterParts()
+			end
+			
 			for _, part in ipairs(Variables.CharacterParts) do
 				if part and part.Parent then
 					part.Anchored = false
@@ -244,34 +250,31 @@ do
 			Variables.DisableDesync()
 		end
 
+		-- == Module Stop Function ==
 		local function Stop()
 			DisableAllFeatures() -- This unpatches and stops the loop
-			Variables.Maids[ModuleName]:DoCleaning() -- This cleans up CharacterAdded
+			Variables.Maids[ModuleName]:DoCleaning() -- This cleans up CharacterAdded + OnChanged
 		end
 
 		-- [4] UI CREATION
-		local RemovalGroupBox
-		if UI.Tabs.Main then
-			-- Find or create a 'Removals' groupbox to add to
-			RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
-		else
-			notify("FireUnderwater: 'Main' tab not found, cannot create UI.")
-			return { Name = ModuleName, Stop = Stop } -- Fail gracefully
-		end
-
+		-- Create the UI elements this module needs
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
+		
 		local NoWaterHeightToggle = RemovalGroupBox:AddToggle("NoWaterHeightToggle", {
 			Text = "Fire Underwater",
-			Tooltip = "Fire weapons underwater.",
+			Tooltip = "Fire weapons underwater & desyncs physics.",
 			DisabledTooltip = "Feature Disabled!",
 			Default = false,
 			Disabled = false,
 			Visible = true,
 			Risky = false,
 		})
-		
-		-- [5] UI WIRING
-		local maid = Variables.Maids[ModuleName]
 
+
+		-- [5] UI WIRING
+		-- Now that 'NoWaterHeightToggle' is created, we can hook into it
+		local maid = Variables.Maids[ModuleName]
+		
 		local function OnChanged(Value)
 			if Value then
 				EnableAllFeatures()
@@ -279,10 +282,10 @@ do
 				DisableAllFeatures()
 			end
 		end
-
+		
 		-- Give the connection to the maid so it's cleaned up on Stop()
 		maid:GiveTask(NoWaterHeightToggle:OnChanged(OnChanged))
-
+		
 		-- Apply current state on load
 		OnChanged(NoWaterHeightToggle.Value)
 		
