@@ -10,7 +10,6 @@ do
 		local ModuleName = "ExtendProximityPrompt"
 		local Variables = {
 			Maids = { [ModuleName] = Maid.new() },
-			NotifyFunc = UI.Notify,
 			RunFlag = false, -- Tracks if the module is active
 			
 			-- Nevermore modules
@@ -41,15 +40,6 @@ do
 		Variables.FALLBACK_COOLDOWN = Variables.DEFAULT_WEAPON_COOLDOWN + Variables.GLOBAL_PAD
 
 		-- [3] CORE LOGIC
-		
-		-- == Helper: Notifier ==
-		local function notify(msg)
-			if Variables.NotifyFunc then
-				pcall(Variables.NotifyFunc, msg)
-			else
-				print(msg) -- Fallback
-			end
-		end
 
 		-- == Helper: Load Nevermore ==
 		local function LoadNevermoreModules()
@@ -60,21 +50,11 @@ do
 				return require(nm)
 			end)
 			
-			if not (ok and L) then
-				notify("NoPopupCooldown: Nevermore loader not found")
-				return false
-			end
-			
 			Variables.L = L
 			Variables.TriggerClient = L("TriggerClient")
 			Variables.TriggerConstants = L("TriggerConstants")
 			Variables.ClientBinders = L("ClientBinders")
 			Variables.CooldownConstants = L("CooldownConstants")
-			
-			if not (Variables.TriggerClient and Variables.TriggerConstants and Variables.ClientBinders and Variables.CooldownConstants) then
-				notify("NoPopupCooldown: Failed to load Nevermore modules")
-				return false
-			end
 			
 			return true
 		end
@@ -181,11 +161,6 @@ do
 		local function Start()
 			if Variables.RunFlag then return end
 			
-			if not LoadNevermoreModules() then
-				notify("NoPopupCooldown: Aborting Start(), modules not found.")
-				return
-			end
-			
 			Variables.RunFlag = true
 			
 			-- Backup originals
@@ -200,7 +175,6 @@ do
 			Variables.TriggerConstants.LEEWAY_DISTANCE = 40
 			Variables.TriggerClient.Activate = HookedActivate
 			
-			notify("No Popup Cooldown: [ON]")
 		end
 
 		local function Stop()
@@ -238,13 +212,12 @@ do
 			Variables.Originals = {}
 			
 			Variables.Maids[ModuleName]:DoCleaning()
-			notify("No Popup Cooldown: [OFF]")
 		end
 
 		-- [4] UI CREATION
 		local RemovalGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Removals")
 		
-		local ExtendEroximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
+		local ExtendProximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
 			Text = "Extend Proximity Prompt",
 			Tooltip = "Extend proximity prompts of any weapon.",
 			Default = false,
@@ -259,8 +232,8 @@ do
 			end
 		end
 		
-		NoPopupCooldownToggle:OnChanged(OnChanged)
-		OnChanged(NoPopupCooldownToggle.Value)
+		ExtendProximityPromptToggle:OnChanged(OnChanged)
+		OnChanged(ExtendEroximityPromptToggle.Value)
 
 		-- [6] RETURN MODULE
 		return { Name = ModuleName, Stop = Stop }
