@@ -194,7 +194,8 @@ do
 		end
 		
 		-- Give the connection to the maid so it's cleaned up on Stop()
-		maid:GiveTask(NoWaterHeightToggle:OnChanged(OnChanged))
+		-- maid:GiveTask(NoWaterHeightToggle:OnChanged(OnChanged)) -- REMOVED: This line causes the error
+		NoWaterHeightToggle:OnChanged(OnChanged) -- MODIFIED: This matches your dev guide's template.
 		
 		-- Apply current state on load
 		OnChanged(NoWaterHeightToggle.Value)
