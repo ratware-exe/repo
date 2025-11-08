@@ -107,8 +107,13 @@ do
 		-- Add the Toggle
 		local InfiniteJumpToggle = MovementGroupbox:AddToggle("InfiniteJumpToggle", {
 			Text = "Infinite Jump",
-			Tooltip = "Hold Spacebar to fly upwards.",
+			Tooltip = "Hold Spacebar to infinite jump.",
 			Default = false,
+		})
+		UI.Toggles.InfiniteJumpToggle:AddKeyPicker("InfiniteJumpKeybind", {
+			Text = "Infinite Jump",
+			SyncToggleState = true,
+			Mode = "Toggle", 
 		})
 		
 		-- [5] UI WIRING
