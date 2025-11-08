@@ -42,6 +42,7 @@ local featurePaths = {
     -- Cloud
     "modules/wfyb/cloud/loadbuild.lua",
     "modules/wfyb/cloud/savebuild.lua",
+    "modules/wfyb/cloud/overwritebuild.lua",
     
     -- ESP & Visuals
     "modules/backup/playeresp.lua",
