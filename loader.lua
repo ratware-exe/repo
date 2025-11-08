@@ -32,9 +32,12 @@ do
     })
 
     local Tabs = {
+		["Info"] = Window:AddTab("Info", "info"),
         Main = Window:AddTab("Main", "grip"),
 	    Automation = Window:AddTab("Automation", "bot"),
 	    Visual = Window:AddTab("Visual", "glasses"),
+    	["Build"] = Window:AddTab("Build", "hammer"),
+    	["Cloud"] = Window:AddTab("Cloud", "router"),
         EXP = Window:AddTab("EXP", "tractor"),
     	Dupe = Window:AddTab("Dupe", "dollar-sign"),
         Visuals = Window:AddTab("Visuals", "eye"),
