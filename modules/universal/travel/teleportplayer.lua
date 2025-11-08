@@ -1,4 +1,4 @@
--- "modules/wfyb/teleportplayer.lua",
+-- "modules/universal/travel/teleportplayer.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
