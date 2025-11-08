@@ -1,4 +1,4 @@
--- "modules/wfyb/bypass/extendproximityprompts.lua",
+-- "modules/wfyb/bypass/extendproximityprompt.lua",
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
