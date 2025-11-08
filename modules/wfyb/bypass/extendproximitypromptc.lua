@@ -257,7 +257,7 @@ do
 
 		-- [4] UI CREATION
 		-- FIXED: Changed UI.Tabs.Temp to UI.Tabs.Main
-		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
+		local RemovalGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Removals")
 		
 		local ExtendProximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
 			Text = "Extend Proximity Prompt",
