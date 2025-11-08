@@ -1,78 +1,118 @@
--- modules/vipservercommands.lua
+-- "modules/wfyb/vipservercommands.lua"
 do
-    return function(UI)
-        local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+	return function(UI)
+		-- [1] LOAD DEPENDENCIES
+		local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
+		local GlobalEnv = (getgenv and getgenv()) or _G
+		local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 
-        local GlobalEnv = (getgenv and getgenv()) or _G
-        GlobalEnv.Signal = GlobalEnv.Signal or loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
-        local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+		-- [2] MODULE STATE
+		local ModuleName = "VIPServerCommands"
+		local Variables = {
+			Maids = { [ModuleName] = Maid.new() },
+		}
+		
+		-- This table will hold the module's functions
+		local vipCommandsModule = {}
 
-        local Variables = {
-            Maids = { VIPServerCommands = Maid.new() },
-        }
+		-- [3] CORE LOGIC
+		local function RunVipCmd(cmdString)
+			local chatEvents = RbxService.ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+			if chatEvents and chatEvents:FindFirstChild("SayMessageRequest") then
+				chatEvents.SayMessageRequest:FireServer(cmdString, "All")
+				return
+			end
+			local channels = RbxService.TextChatService:FindFirstChild("TextChannels")
+			local target = channels and (channels:FindFirstChild("RBXGeneral") or channels:FindFirstChild("General"))
+			if target and target.SendAsync then
+				target:SendAsync(cmdString)
+			else
+				-- Add notification here if needed
+			end
+		end
 
-        local function RunVipCommand(commandString)
-            local defaultChatFolder = RbxService.ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-            if defaultChatFolder and defaultChatFolder:FindFirstChild("SayMessageRequest") then
-                defaultChatFolder.SayMessageRequest:FireServer(commandString, "All")
-                return
-            end
-            local textChannels = RbxService.TextChatService:FindFirstChild("TextChannels")
-            local targetChannel = textChannels and (textChannels:FindFirstChild("RBXGeneral") or textChannels:FindFirstChild("General"))
-            if targetChannel and targetChannel.SendAsync then
-                targetChannel:SendAsync(commandString)
-                return
-            end
-            warn("[VIP] No chat remotes or TextChat channel available.")
-        end
+		function vipCommandsModule.Freecam()
+			local localPlayer = RbxService.Players.LocalPlayer
+			if localPlayer and localPlayer.Name then
+				RunVipCmd("/vipfreecam " .. localPlayer.Name)
+			else
+				-- Add notification here if needed
+			end
+		end
 
-        local ModuleApi = {}
-        function ModuleApi.NextMode()
-            RunVipCommand("/vipnextmode")
-        end
-        function ModuleApi.Freecam()
-            local localPlayer = RbxService.Players.LocalPlayer
-            if localPlayer and localPlayer.Name then
-                RunVipCommand("/vipfreecam " .. localPlayer.Name)
-            end
-        end
-        function ModuleApi.StopFreecam()
-            local localPlayer = RbxService.Players.LocalPlayer
-            if localPlayer and localPlayer.Name then
-                RunVipCommand("/vipstopfreecam " .. localPlayer.Name)
-            end
-        end
-        function ModuleApi.Stop()
-            pcall(function() Variables.Maids.VIPServerCommands:DoCleaning() end)
-        end
+		function vipCommandsModule.StopFreecam()
+			local localPlayer = RbxService.Players.LocalPlayer
+			if localPlayer and localPlayer.Name then
+				RunVipCmd("/vipstopfreecam " .. localPlayer.Name)
+			else
+				-- Add notification here if needed
+			end
+		end
 
-        -- UI
-        local vipservercommandsgroupbox = UI.Tabs.Misc:AddLeftGroupbox("VIP Commands", "layout-dashboard")
-        vipservercommandsgroupbox:AddButton({
-            Text = "Next Mode",
-            Func = function() ModuleApi.NextMode() end,
-            DoubleClick = false,
-            Tooltip = "Same as /vipnextmode.",
-            DisabledTooltip = "Feature Disabled",
-            Disabled = false,
-        })
-        vipservercommandsgroupbox:AddButton({
-            Text = "Freecam",
-            Func = function() ModuleApi.Freecam() end,
-            DoubleClick = false,
-            Tooltip = "Same as /vipfreecam.",
-            DisabledTooltip = "Feature Disabled",
-            Disabled = false,
-        })
-        vipservercommandsgroupbox:AddButton({
-            Text = "Stop Freecam",
-            Func = function() ModuleApi.StopFreecam() end,
-            DoubleClick = false,
-            Tooltip = "Same as /vipstopfreecam.",
-            DisabledTooltip = "Feature Disabled",
-            Disabled = false,
-        })
+		function vipCommandsModule.NextMode()
+			RunVipCmd("/vipnextmode")
+		end
 
-        return { Name = "VIPServerCommands", Stop = ModuleApi.Stop }
-    end
+		local function Start()
+			-- This module is event-driven, no main loop needed
+		end
+
+		local function Stop()
+			pcall(function() Variables.Maids[ModuleName]:DoCleaning() end)
+		end
+
+		-- [4] UI CREATION
+		local VIPServerCommandsGroupbox = UI.Tabs.Misc:AddLeftGroupbox("VIP Commands", "terminal")
+		
+		local vipnextmodeButton = VIPServerCommandsGroupbox:AddButton({
+			Text = "Next Mode",
+			Func = function() end, 
+			DoubleClick = false,
+			Tooltip = "Same as /vipnextmode.",
+			DisabledTooltip = "Feature Disabled", 
+			Disabled = false,
+		})
+		
+		local vipfreecamButton = VIPServerCommandsGroupbox:AddButton({
+			Text = "Freecam",
+			Func = function() end, 
+			DoubleClick = false,
+			Tooltip = "Same as /vipfreecam.",
+			DisabledTooltip = "Feature Disabled", 
+			Disabled = false,
+		})
+		
+		local vipstopfreecamButton = VIPServerCommandsGroupbox:AddButton({
+			Text = "Stop Freecam",
+			Func = function() end, 
+			DoubleClick = false,
+			Tooltip = "Same as /vipstopfreecam.",
+			DisabledTooltip = "Feature Disabled", 
+			Disabled = false,
+		})
+
+		-- [5] UI WIRING
+		pcall(function()
+			vipfreecamButton.Func = function()
+				vipCommandsModule.Freecam()
+			end
+		end)
+		
+		pcall(function()
+			vipstopfreecamButton.Func = function()
+				vipCommandsModule.StopFreecam()
+			end
+		end)
+		
+		pcall(function()
+			vipnextmodeButton.Func = function()
+				vipCommandsModule.NextMode()
+			end
+		end)
+		
+		Start() -- Run the "start" logic
+
+		-- [6] RETURN MODULE
+		return { Name = ModuleName, Stop = Stop }
+	end
 end
