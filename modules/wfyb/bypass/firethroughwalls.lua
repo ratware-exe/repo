@@ -95,12 +95,12 @@ do
 
 		-- [4] UI CREATION
 		-- Find or create the "Removals" groupbox (deduplicated by UIRegistry)
-		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Bypass")
 		
 		-- Add the new toggle
 		local ShootThroughWallsToggle = RemovalGroupBox:AddToggle("ShootThroughWallsToggle", {
-			Text = "Shoot Through Walls",
-			Tooltip = "Bypass LOS/wall checks on the client.",
+			Text = "Shoot Wall Check",
+			Tooltip = "Bypass LOS & wall checks on the client.",
 			Default = false,
 			Disabled = false,
 			Visible = true,
