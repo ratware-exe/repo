@@ -15,7 +15,6 @@ do
     loadstring(game:HttpGet(GlobalEnv.RepoBase .. "watermark/wfybexploits.lua"), "@watermark/wfybexploits.lua")()
 
 local featurePaths = {
-    "watermark/wfybexploits.lua",
     "dependency/UIRegistry.lua",
     "modules/universal/debug/errorsuppressor.lua",
     "modules/wfyb/acbypass/sightoverseer.lua",
