@@ -1,4 +1,4 @@
--- "modules/wfyb/bypass/shootthroughwalls.lua"
+-- "modules/wfyb/bypass/firethroughwalls.lua"
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
