@@ -7,7 +7,7 @@ do
 		local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 		
 		-- [2] MODULE STATE
-		local ModuleName = "NoPopupCooldown"
+		local ModuleName = "ExtendProximityPrompt"
 		local Variables = {
 			Maids = { [ModuleName] = Maid.new() },
 			NotifyFunc = UI.Notify,
@@ -244,9 +244,9 @@ do
 		-- [4] UI CREATION
 		local RemovalGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Removals")
 		
-		local NoPopupCooldownToggle = RemovalGroupBox:AddToggle("NoPopupCooldownToggle", {
-			Text = "No Popup Cooldown",
-			Tooltip = "Instantly hides popups (cannons, etc.) after firing.",
+		local ExtendEroximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
+			Text = "Extend Proximity Prompt",
+			Tooltip = "Extend proximity prompts of any weapon.",
 			Default = false,
 		})
 		
