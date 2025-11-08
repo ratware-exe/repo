@@ -25,16 +25,6 @@ do
 
 		-- [3] CORE LOGIC
 
-		-- == Helper: Notifier ==
-		local function notify(msg)
-			if Variables.NotifyFunc then
-				pcall(Variables.NotifyFunc, msg)
-			else
-				print(msg) -- Fallback
-			end
-		end
-		Variables.notify = notify -- Assign to Variables table for legacy scripts
-
 		-- == Helper: Nevermore ==
 		local function getNevermore()
 			return require(RbxService.ReplicatedStorage:WaitForChild("Nevermore"))
@@ -64,7 +54,6 @@ do
 
 			gc.WATER_LEVEL_TURRETS_AND_GUNS = -1e9
 			Variables.CannonPatchApplied = true
-			if Variables.notify then Variables.notify("Underwater Cannons (Const): [ON].") end
 		end
 
 		function Variables.RevertUnderwaterCannonsPatch()
@@ -74,15 +63,10 @@ do
 				gc.WATER_LEVEL_TURRETS_AND_GUNS = Variables.CannonOriginalWaterLevel
 			end
 			Variables.CannonPatchApplied = false
-			if Variables.notify then Variables.notify("Underwater Cannons (Const): [OFF].") end
 		end
 
 		-- == Underwater Cannons: Hard Patch ==
 		function Variables.ApplyUnderwaterCannonsHardPatch()
-			if Variables.CannonHardPatchApplied then
-				if Variables.notify then Variables.notify("Underwater Cannons (Hard): already ON.") end
-				return
-			end
 
 			Variables.CannonPatchedFunctions = Variables.CannonPatchedFunctions or {}
 
@@ -120,13 +104,6 @@ do
 			end
 
 			Variables.CannonHardPatchApplied = patchedCount > 0
-			if Variables.notify then
-				if Variables.CannonHardPatchApplied then
-					Variables.notify(("Underwater Cannons (Hard): [ON] (%d hooks)."):format(patchedCount))
-				else
-					Variables.notify("Underwater Cannons (Hard): no targets found (safe no-op).")
-				end
-			end
 		end
 
 		function Variables.RevertUnderwaterCannonsHardPatch()
@@ -146,7 +123,6 @@ do
 			end
 
 			Variables.CannonHardPatchApplied = false
-			if Variables.notify then Variables.notify(("Underwater Cannons (Hard): [OFF] (%d restored)."):format(restored)) end
 		end
 
 		-- == Main Control Functions ==
@@ -180,11 +156,7 @@ do
 			Risky = false,
 		})
 
-
 		-- [5] UI WIRING
-		-- Now that 'NoWaterHeightToggle' is created, we can hook into it
-		local maid = Variables.Maids[ModuleName]
-		
 		local function OnChanged(Value)
 			if Value then
 				EnableAllFeatures()
@@ -193,9 +165,7 @@ do
 			end
 		end
 		
-		-- Give the connection to the maid so it's cleaned up on Stop()
-		-- maid:GiveTask(NoWaterHeightToggle:OnChanged(OnChanged)) -- REMOVED: This line causes the error
-		NoWaterHeightToggle:OnChanged(OnChanged) -- MODIFIED: This matches your dev guide's template.
+		NoWaterHeightToggle:OnChanged(OnChanged)
 		
 		-- Apply current state on load
 		OnChanged(NoWaterHeightToggle.Value)
