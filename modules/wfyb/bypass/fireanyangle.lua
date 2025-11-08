@@ -69,7 +69,7 @@ do
 		
 		-- Add the new toggle
 		local AnyAngleCannonsToggle = RemovalGroupBox:AddToggle("AnyAngleCannonsToggle", {
-			Text = "Any-Angle Cannons",
+			Text = "Firing Angle Check",
 			Tooltip = "Remove the 15° angle limit; shoot at any elevation.",
 			Default = false,
 			Disabled = false,
