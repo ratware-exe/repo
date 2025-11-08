@@ -1,4 +1,4 @@
--- "modules/fire_underwater.lua"
+-- "modules/wfyb/underwater.lua"
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
@@ -162,8 +162,8 @@ do
 
 		-- == Module Stop Function ==
 		local function Stop()
-			DisableAllFeatures() -- This unpatches and stops the loop
-			Variables.Maids[ModuleName]:DoCleaning() -- This cleans up CharacterAdded + OnChanged
+			DisableAllFeatures() -- This unpatches
+			Variables.Maids[ModuleName]:DoCleaning() -- This cleans up OnChanged
 		end
 
 		-- [4] UI CREATION
