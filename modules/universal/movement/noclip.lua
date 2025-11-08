@@ -57,7 +57,6 @@ do
 
         -- [4] UI CREATION
         local MovementGroupBox = UI.Tabs.Main:AddLeftGroupbox("Movement", "person-standing")
-        MovementGroupBox:AddDivider()
 		local NoclipToggle = MovementGroupBox:AddToggle("NoclipToggle", {
 			Text = "No Clip",
 			Tooltip = "Makes you go through objects.", 
