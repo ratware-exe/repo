@@ -10,6 +10,7 @@ do
 		local ModuleName = "ExtendProximityPrompt"
 		local Variables = {
 			Maids = { [ModuleName] = Maid.new() },
+			-- NotifyFunc = UI.Notify, -- REMOVED
 			RunFlag = false, -- Tracks if the module is active
 			
 			-- Nevermore modules
@@ -41,6 +42,15 @@ do
 
 		-- [3] CORE LOGIC
 
+		-- == Helper: Notifier ==
+		-- local function notify(msg) -- REMOVED
+		-- 	if Variables.NotifyFunc then
+		-- 		pcall(Variables.NotifyFunc, msg)
+		-- 	else
+		-- 		print(msg) -- Fallback
+		-- 	end
+		-- end
+
 		-- == Helper: Load Nevermore ==
 		local function LoadNevermoreModules()
 			if Variables.L then return true end -- Already loaded
@@ -51,6 +61,7 @@ do
 			end)
 			
 			if not (ok and L) then
+				-- notify("ExtendProximityPrompt: Nevermore loader not found") -- REMOVED
 				return false
 			end
 			
@@ -61,6 +72,7 @@ do
 			Variables.CooldownConstants = L("CooldownConstants")
 			
 			if not (Variables.TriggerClient and Variables.TriggerConstants and Variables.ClientBinders and Variables.CooldownConstants) then
+				-- notify("ExtendProximityPrompt: Failed to load Nevermore modules") -- REMOVED
 				return false
 			end
 			
@@ -120,27 +132,37 @@ do
 
 			nv.Parent = att
 			Variables.SyntheticByAttachment[att] = nv
+			
+			local maid = Variables.Maids[ModuleName]
 
 			-- If a real server Cooldown shows up later, drop ours immediately
 			local conn; conn = att.ChildAdded:Connect(function(ch)
 				if ch.Name == Variables.CooldownConstants.COOLDOWN_NAME and ch ~= nv then
 					if Variables.SyntheticByAttachment[att] == nv and nv.Parent then nv:Destroy() end
 					Variables.SyntheticByAttachment[att] = nil
-					if conn then conn:Disconnect() end
+					if conn then conn:Disconnect() conn = nil end
 				end
 			end)
+			
+			-- This thread will run to clean up
+			local delayThread = task.spawn(function()
+				task.wait(seconds + 0.10) -- Use task.wait inside a spawned thread
+				
+				-- Check if the thread was cancelled by Stop()
+				if not conn then return end -- 'conn' would be nil'd by Stop()
 
-			-- Hard cleanup: prevents any chance of “infinite cooldown”
-			local delayMaid = Maid.new()
-			delayMaid:GiveTask(conn)
-			delayMaid:GiveTask(task.delay(seconds + 0.10, function()
+				-- If we're still running, do the cleanup
 				if Variables.SyntheticByAttachment[att] == nv and nv.Parent then nv:Destroy() end
 				Variables.SyntheticByAttachment[att] = nil
-				delayMaid:DoCleaning()
-			end))
+				if conn then conn:Disconnect() conn = nil end
+			end)
 			
-			-- Give this temporary maid to the main module maid
-			Variables.Maids[ModuleName]:GiveTask(delayMaid)
+			-- Give BOTH tasks to the main module's maid.
+			-- When Stop() is called, it will cancel 'delayThread' and run the 'conn' cleanup.
+			maid:GiveTask(delayThread)
+			maid:GiveTask(function()
+				if conn then conn:Disconnect() conn = nil end
+			end)
 		end
 		
 		-- == Hook Function ==
@@ -174,6 +196,7 @@ do
 			
 			-- FIXED: Load modules *before* using them
 			if not LoadNevermoreModules() then
+				-- notify("ExtendProximityPrompt: Aborting Start(), modules not found.") -- REMOVED
 				return
 			end
 			
@@ -191,6 +214,7 @@ do
 			Variables.TriggerConstants.LEEWAY_DISTANCE = 40
 			Variables.TriggerClient.Activate = HookedActivate
 			
+			-- notify("Extend Proximity Prompt: [ON]") -- REMOVED
 		end
 
 		local function Stop()
@@ -228,6 +252,7 @@ do
 			Variables.Originals = {}
 			
 			Variables.Maids[ModuleName]:DoCleaning()
+			-- notify("Extend Proximity Prompt: [OFF]") -- REMOVED
 		end
 
 		-- [4] UI CREATION
@@ -236,7 +261,7 @@ do
 		
 		local ExtendProximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
 			Text = "Extend Proximity Prompt",
-			Tooltip = "Extend proximity prompts of any weapon.",
+			Tooltip = "Extend the proximity prompt of any weapon.",
 			Default = false,
 		})
 		
