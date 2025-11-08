@@ -1,4 +1,4 @@
--- "modules/wfyb/infinite_stamina.lua",
+-- "modules/wfyb/bypass/infinitestamina.lua",
 do
     return function(UI)
         -- [1] LOAD DEPENDENCIES
