@@ -1,4 +1,4 @@
--- "modules/wfyb/automation/autoflip.lua"
+-- "modules/automation/autoflip.lua"
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
@@ -157,16 +157,19 @@ do
 				seatMaid:DoCleaning()
 			end
 			Variables.SeatWatchMaids = setmetatable({}, { __mode = "k" })
-			maid:Clean("BoatChildAdded") -- Clear old listener
+			
+			-- FIXED: Use nil assignment to clean the specific task
+			maid["BoatChildAdded"] = nil -- Clear old listener
 			
 			local boatModel = getOwnedBoatModel()
 			if boatModel then
 				-- Watch for new seats being added (e.g., build mode)
-				maid:GiveTask(boatModel.ChildAdded:Connect(function(child)
+				-- FIXED: Store task with a key
+				maid["BoatChildAdded"] = boatModel.ChildAdded:Connect(function(child)
 					if toLowerContainsSeat(child.Name) then
 						WatchSeat(child)
 					end
-				end), "BoatChildAdded")
+				end)
 				
 				-- Watch existing seats
 				for _, child in ipairs(boatModel:GetChildren()) do
@@ -182,11 +185,12 @@ do
 			Variables.RunFlag = true
 			
 			-- Watch for respawns
-			maid:GiveTask(Variables.Player.CharacterAdded:Connect(function()
+			-- FIXED: Store task with a key
+			maid["CharacterAdded"] = Variables.Player.CharacterAdded:Connect(function()
 				task.wait(2) -- Wait for boat to load
 				if not Variables.RunFlag then return end
 				ScanForBoatAndSeats()
-			end), "CharacterAdded")
+			end)
 			
 			-- Initial scan
 			ScanForBoatAndSeats()
@@ -196,9 +200,9 @@ do
 			if not Variables.RunFlag then return end
 			Variables.RunFlag = false
 			
-			-- Clean up CharacterAdded listener
-			maid:Clean("CharacterAdded")
-			maid:Clean("BoatChildAdded")
+			-- FIXED: Use nil assignment to clean tasks
+			maid["CharacterAdded"] = nil
+			maid["BoatChildAdded"] = nil
 			
 			-- Clean up all individual seat watchers
 			for seat, seatMaid in pairs(Variables.SeatWatchMaids) do
@@ -222,7 +226,8 @@ do
 			Risky = false,
 		})
 
-		-- [6] UI WIRING
+		-- [6.5] UI WIRING
+		-- Define OnChanged BEFORE using it
 		local function OnChanged(Value)
 			if Value then
 				Start()
