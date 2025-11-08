@@ -157,6 +157,7 @@ do
 			Compact = true,
 			Tooltip = "Changes speedhack speed.", 
 		})
+		MovementGroupBox:AddDivider()
         
         -- [5] UI WIRING (CORRECTED)
         UI.Toggles.SpeedhackToggle:OnChanged(function(enabledState)
