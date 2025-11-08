@@ -21,6 +21,7 @@ local featurePaths = {
     "modules/universal/movement/fly.lua",
     "modules/universal/movement/noclip.lua",
     "modules/wfyb/infinitestamina.lua",
+    "modules/wfyb/fireunderwater.lua",
     "modules/universal/rage/attachtoback.lua",
     "modules/universal/travel/teleportcframe.lua",
     "modules/universal/travel/teleportplayer.lua",
