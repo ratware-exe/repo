@@ -22,7 +22,7 @@ local featurePaths = {
     "modules/universal/movement/fly.lua",
     "modules/universal/movement/noclip.lua",
     "modules/wfyb/bypass/infinitestamina.lua",
-    "modules/wfyb/bypass/underwater.lua",
+    "modules/wfyb/bypass/shootunderwater.lua",
     "modules/wfyb/bypass/fireanyangle.lua",
     "modules/wfyb/bypass/firethroughwall.lua",
     "modules/universal/rage/attachtoback.lua",
