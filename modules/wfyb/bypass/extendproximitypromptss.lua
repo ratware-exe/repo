@@ -41,6 +41,15 @@ do
 
 		-- [3] CORE LOGIC
 
+		-- == Helper: Notifier ==
+		local function notify(msg)
+			if Variables.NotifyFunc then
+				pcall(Variables.NotifyFunc, msg)
+			else
+				print(msg) -- Fallback
+			end
+		end
+
 		-- == Helper: Load Nevermore ==
 		local function LoadNevermoreModules()
 			if Variables.L then return true end -- Already loaded
@@ -50,11 +59,19 @@ do
 				return require(nm)
 			end)
 			
+			if not (ok and L) then
+				return false
+			end
+			
 			Variables.L = L
 			Variables.TriggerClient = L("TriggerClient")
 			Variables.TriggerConstants = L("TriggerConstants")
 			Variables.ClientBinders = L("ClientBinders")
 			Variables.CooldownConstants = L("CooldownConstants")
+			
+			if not (Variables.TriggerClient and Variables.TriggerConstants and Variables.ClientBinders and Variables.CooldownConstants) then
+				return false
+			end
 			
 			return true
 		end
@@ -69,6 +86,8 @@ do
 
 		local function computeSecondsFromContext(att)
 			-- search upwards a few levels for a NumberValue named CooldownTime
+			if not Variables.CooldownConstants then return Variables.FALLBACK_COOLDOWN end -- Guard
+			
 			local cur, hops = att and att.Parent, 0
 			while cur and hops < 8 do
 				local v = cur:FindFirstChild(Variables.CooldownConstants.COOLDOWN_TIME_NAME)
@@ -82,6 +101,7 @@ do
 
 		local function bindSyntheticCooldown(att, seconds)
 			if not (att and att:IsA("Attachment")) then return end
+			if not Variables.CooldownConstants then return end -- Guard
 
 			-- If server already put a real Cooldown here, do nothing.
 			if att:FindFirstChild(Variables.CooldownConstants.COOLDOWN_NAME) then return end
@@ -161,6 +181,11 @@ do
 		local function Start()
 			if Variables.RunFlag then return end
 			
+			-- FIXED: Load modules *before* using them
+			if not LoadNevermoreModules() then
+				return
+			end
+			
 			Variables.RunFlag = true
 			
 			-- Backup originals
@@ -215,7 +240,8 @@ do
 		end
 
 		-- [4] UI CREATION
-		local RemovalGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Removals")
+		-- FIXED: Changed UI.Tabs.Temp to UI.Tabs.Main
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
 		
 		local ExtendProximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
 			Text = "Extend Proximity Prompt",
@@ -233,6 +259,8 @@ do
 		end
 		
 		ExtendProximityPromptToggle:OnChanged(OnChanged)
+		
+		-- Apply current state on load
 		OnChanged(ExtendProximityPromptToggle.Value)
 
 		-- [6] RETURN MODULE
