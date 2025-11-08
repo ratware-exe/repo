@@ -24,6 +24,7 @@ local featurePaths = {
     "modules/universal/movement/speedhack.lua",
     "modules/universal/movement/fly.lua",
     "modules/universal/movement/noclip.lua",
+    "modules/universal/movement/infinitejump.lua",
     "modules/wfyb/bypass/infinitestamina.lua",
     "modules/wfyb/bypass/shootunderwater.lua",
     "modules/wfyb/bypass/fireanyangle.lua",
