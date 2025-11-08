@@ -1,10 +1,25 @@
 -- "modules/universal/combat/aura.lua"
 do
+	-- This block cleans up any OLD, GLOBAL versions of this script
+	-- to prevent conflicts with this new module.
+	pcall(function()
+		local connections = getgenv().configs and getgenv().configs.connection
+		if connections then
+			local Disable = configs.Disable
+			for i, v in connections do
+				v:Disconnect()
+			end
+			Disable:Fire()
+			Disable:Destroy()
+			table.clear(configs)
+		end
+	end)
+	
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
 		local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
 		local GlobalEnv = (getgenv and getgenv()) or _G
-		local Maid = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+		local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 		
 		-- [2] MODULE STATE
 		local ModuleName = "Aura"
@@ -67,27 +82,27 @@ do
 		local function AuraLoop()
 			while Variables.RunFlag do
 				local char = getchar()
-				-- CRASH FIX: Check for character, humanoid, and root part
+				-- CRASH FIX: Check for character and humanoid
 				local hum = gethumanoid(char)
-				local root = getRootPart(char)
 				
-				if char and hum and root and IsAlive(hum) then
+				if char and hum and IsAlive(hum) then
 					local Tool = char:FindFirstChildWhichIsA("Tool")
 					local TouchInterest = Tool and GetTouchInterest(Tool)
 
 					if TouchInterest then
-						local TouchPart = TouchInterest.Parent
+						local TouchPart = TouchInterest.Parent -- This is the tool's handle
 						local Characters = GetCharacters(char)
 						
 						local op = Variables.OverlapParams
 						op.FilterDescendantsInstances = Characters
 						
-						-- RADIUS FIX: Center on player, not tool
+						-- RADIUS FIX: Add slider radius to the tool's existing size
 						local radius = Variables.HitboxSize
-						local size = Vector3.new(radius, radius, radius)
+						local extraSize = Vector3.new(radius, radius, radius)
+						local toolSize = TouchPart.Size
 						
-						-- RADIUS FIX: Get parts around the player's root part
-						local InstancesInBox = RbxService.Workspace:GetPartBoundsInBox(root.CFrame, size, op)
+						-- Use the tool's CFrame and its new, larger size
+						local InstancesInBox = RbxService.Workspace:GetPartBoundsInBox(TouchPart.CFrame, toolSize + extraSize, op)
 
 						for i, v in pairs(InstancesInBox) do
 							local Character = v:FindFirstAncestorWhichIsA("Model")
@@ -117,7 +132,7 @@ do
 			Variables.OverlapParams.FilterType = Enum.RaycastFilterType.Include
 			
 			-- Start the loop and give it to the maid
-			maid.MainThread = task.spawn(AuraLoop)
+			maid["MainThread"] = task.spawn(AuraLoop)
 		end
 
 		local function Stop()
@@ -125,7 +140,7 @@ do
 			Variables.RunFlag = false
 			
 			-- This will stop the loop and (on the next line) cancel the thread
-			maid.MainThread = nil -- This tells the maid to run the cleanup
+			maid["MainThread"] = nil -- This tells the maid to run the cleanup
 		end
 
 		-- [6] UI CREATION
