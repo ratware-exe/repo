@@ -181,7 +181,7 @@ do
 		moduleMaid:GiveTask(charConn) -- Give to main maid
 
 		-- [5] UI CREATION
-		local MovementGroupbox = UI.Tabs.Misc:AddLeftGroupbox("Movement")
+		local MovementGroupbox = UI.Tabs.Temp:AddLeftGroupbox("Movement")
 		
 		local InvisibilityToggle = MovementGroupbox:AddToggle("InvisibilityToggle", {
 			Text = "Enable Invisibility",
