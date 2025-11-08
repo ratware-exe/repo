@@ -233,7 +233,7 @@ do
 		end
 		
 		ExtendProximityPromptToggle:OnChanged(OnChanged)
-		OnChanged(ExtendEroximityPromptToggle.Value)
+		OnChanged(ExtendProximityPromptToggle.Value)
 
 		-- [6] RETURN MODULE
 		return { Name = ModuleName, Stop = Stop }
