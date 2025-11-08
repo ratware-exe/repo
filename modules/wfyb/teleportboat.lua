@@ -267,7 +267,7 @@ do
         end
 
         -- [4] UI CREATION
-        local TeleportBox = UI.Tabs.Main:AddRightTabbox()
+        local TeleportBox = UI.Tabs.Main:AddRightTabbox("Teleport")
         local BoatTPTabBox = TeleportBox:AddTab("Boat TP")
         BoatTPTabBox:AddDropdown("UniversalBoatDropdown", {
             Values = Variables.UniversalBoatList,
