@@ -10,8 +10,12 @@ do
 		local ModuleName = "ExtendProximityPrompt"
 		local Variables = {
 			Maids = { [ModuleName] = Maid.new() },
-			-- NotifyFunc = UI.Notify, -- REMOVED
+			NotifyFunc = UI.Notify,
 			RunFlag = false, -- Tracks if the module is active
+			
+			-- Auto Trigger State
+			AutoFireEnabled = false,
+			AutoTriggerHeartbeat = nil,
 			
 			-- Nevermore modules
 			L = nil,
@@ -39,17 +43,18 @@ do
 		}
 		
 		Variables.FALLBACK_COOLDOWN = Variables.DEFAULT_WEAPON_COOLDOWN + Variables.GLOBAL_PAD
+		local maid = Variables.Maids[ModuleName]
 
 		-- [3] CORE LOGIC
-
+		
 		-- == Helper: Notifier ==
-		-- local function notify(msg) -- REMOVED
-		-- 	if Variables.NotifyFunc then
-		-- 		pcall(Variables.NotifyFunc, msg)
-		-- 	else
-		-- 		print(msg) -- Fallback
-		-- 	end
-		-- end
+		local function notify(msg)
+			if Variables.NotifyFunc then
+				pcall(Variables.NotifyFunc, msg)
+			else
+				print(msg) -- Fallback
+			end
+		end
 
 		-- == Helper: Load Nevermore ==
 		local function LoadNevermoreModules()
@@ -61,7 +66,7 @@ do
 			end)
 			
 			if not (ok and L) then
-				-- notify("ExtendProximityPrompt: Nevermore loader not found") -- REMOVED
+				notify("ExtendProximityPrompt: Nevermore loader not found")
 				return false
 			end
 			
@@ -72,7 +77,7 @@ do
 			Variables.CooldownConstants = L("CooldownConstants")
 			
 			if not (Variables.TriggerClient and Variables.TriggerConstants and Variables.ClientBinders and Variables.CooldownConstants) then
-				-- notify("ExtendProximityPrompt: Failed to load Nevermore modules") -- REMOVED
+				notify("ExtendProximityPrompt: Failed to load Nevermore modules")
 				return false
 			end
 			
@@ -133,8 +138,6 @@ do
 			nv.Parent = att
 			Variables.SyntheticByAttachment[att] = nv
 			
-			local maid = Variables.Maids[ModuleName]
-
 			-- If a real server Cooldown shows up later, drop ours immediately
 			local conn; conn = att.ChildAdded:Connect(function(ch)
 				if ch.Name == Variables.CooldownConstants.COOLDOWN_NAME and ch ~= nv then
@@ -162,6 +165,67 @@ do
 			maid:GiveTask(delayThread)
 			maid:GiveTask(function()
 				if conn then conn:Disconnect() conn = nil end
+			end)
+		end
+		
+		-- == Auto Trigger Helpers ==
+		local function getTriggerBinder()
+			if not Variables.L then return nil end
+			local ClientBinders = Variables.ClientBinders
+			if ClientBinders and ClientBinders.Trigger then
+				return ClientBinders.Trigger
+			end
+			return nil
+		end
+		
+		local function getTriggerAttachment(triggerInstance)
+			-- TriggerClient keeps the Roblox object as _obj; also has GetObject().
+			local obj
+			pcall(function()
+				if typeof(triggerInstance.GetObject) == "function" then
+					obj = triggerInstance:GetObject()
+				end
+			end)
+			if not obj then
+				pcall(function()
+					obj = triggerInstance._obj
+				end)
+			end
+			return obj
+		end
+
+		local function getPreferredTriggerInstance()
+			local binder = getTriggerBinder()
+			if not binder then return nil end
+			
+			local ok, all = pcall(function()
+				return binder:GetAll()
+			end)
+			if not ok or type(all) ~= "table" then return nil end
+			
+			for _, trig in ipairs(all) do
+				local isPreferred = false
+				pcall(function()
+					if trig.Preferred and trig.Preferred:IsA("BoolValue") then
+						isPreferred = trig.Preferred.Value
+					end
+				end)
+				if isPreferred then
+					return trig
+				end
+			end
+			return nil
+		end
+		
+		local function activatePreferredTrigger()
+			local trig = getPreferredTriggerInstance()
+			if not trig then return end
+		
+			-- Just call Activate.
+			-- The HookedActivate function below will intercept this call
+			-- and apply this module's existing, safer cooldown logic.
+			pcall(function()
+				trig:Activate()
 			end)
 		end
 		
@@ -196,7 +260,7 @@ do
 			
 			-- FIXED: Load modules *before* using them
 			if not LoadNevermoreModules() then
-				-- notify("ExtendProximityPrompt: Aborting Start(), modules not found.") -- REMOVED
+				notify("ExtendProximityPrompt: Aborting Start(), modules not found.")
 				return
 			end
 			
@@ -214,12 +278,42 @@ do
 			Variables.TriggerConstants.LEEWAY_DISTANCE = 40
 			Variables.TriggerClient.Activate = HookedActivate
 			
-			-- notify("Extend Proximity Prompt: [ON]") -- REMOVED
+			notify("Extend Proximity Prompt: [ON]")
+		end
+		
+		local function AutoTriggerStart()
+			if Variables.AutoTriggerHeartbeat then return end -- Already running
+			if not LoadNevermoreModules() then
+				notify("AutoTrigger: Cannot start, Nevermore modules not found.")
+				return
+			end
+			
+			Variables.AutoFireEnabled = true
+			Variables.AutoTriggerHeartbeat = RbxService.RunService.Heartbeat:Connect(function()
+				if Variables.AutoFireEnabled then
+					activatePreferredTrigger()
+				end
+			end)
+			maid:GiveTask(Variables.AutoTriggerHeartbeat)
+			notify("Auto Trigger: [ON]")
+		end
+		
+		local function AutoTriggerStop()
+			Variables.AutoFireEnabled = false
+			if Variables.AutoTriggerHeartbeat then
+				maid:RemoveTask(Variables.AutoTriggerHeartbeat) -- Remove from maid
+				Variables.AutoTriggerHeartbeat:Disconnect() -- Disconnect it
+				Variables.AutoTriggerHeartbeat = nil
+			end
+			notify("Auto Trigger: [OFF]")
 		end
 
 		local function Stop()
 			if not Variables.RunFlag then return end
 			Variables.RunFlag = false
+			
+			-- Stop auto trigger if it's running
+			AutoTriggerStop()
 			
 			-- Restore originals
 			if Variables.TriggerClient and Variables.Originals.Activate then
@@ -252,16 +346,22 @@ do
 			Variables.Originals = {}
 			
 			Variables.Maids[ModuleName]:DoCleaning()
-			-- notify("Extend Proximity Prompt: [OFF]") -- REMOVED
+			notify("Extend Proximity Prompt: [OFF]")
 		end
 
 		-- [4] UI CREATION
 		-- FIXED: Changed UI.Tabs.Temp to UI.Tabs.Main
-		local RemovalGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Removals")
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
 		
 		local ExtendProximityPromptToggle = RemovalGroupBox:AddToggle("ExtendProximityPromptToggle", {
 			Text = "Extend Proximity Prompt",
-			Tooltip = "Extend the proximity prompt of any weapon.",
+			Tooltip = "Extend proximity prompts of any weapon.",
+			Default = false,
+		})
+		
+		local AutoTriggerToggle = RemovalGroupBox:AddToggle("AutoTriggerToggle", {
+			Text = "Auto Trigger",
+			Tooltip = "Automatically fires the closest proximity prompt.",
 			Default = false,
 		})
 		
@@ -278,6 +378,18 @@ do
 		
 		-- Apply current state on load
 		OnChanged(ExtendProximityPromptToggle.Value)
+		
+		-- Wiring for new Auto Trigger toggle
+		local function OnAutoTriggerChanged(Value)
+			if Value then
+				AutoTriggerStart()
+			else
+				AutoTriggerStop()
+			end
+		end
+		
+		AutoTriggerToggle:OnChanged(OnAutoTriggerChanged)
+		OnAutoTriggerChanged(AutoTriggerToggle.Value)
 
 		-- [6] RETURN MODULE
 		return { Name = ModuleName, Stop = Stop }
