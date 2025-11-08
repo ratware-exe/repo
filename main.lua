@@ -19,6 +19,7 @@ local featurePaths = {
     "modules/universal/debug/errorsuppressor.lua",
     "modules/wfyb/acbypass/sightoverseer.lua",
     "modules/wfyb/acbypass/lighting.lua",
+    "modules/information/wfybinfotab.lua",
     -- Movement / Bypass / Teleport / Vehicle tools
     "modules/universal/movement/speedhack.lua",
     "modules/universal/movement/fly.lua",
