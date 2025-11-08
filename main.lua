@@ -20,6 +20,15 @@ local featurePaths = {
     "modules/wfyb/acbypass/sightoverseer.lua",
     "modules/wfyb/acbypass/lighting.lua",
     "modules/information/wfybinfotab.lua",
+
+    "modules/wfyb/bypass/extendproximityprompt.lua",
+    "modules/universal/combat/killaura.lua",
+    "modules/wfyb/farm/autochest.lua",
+
+    "modules/wfyb/automation/autoflip.lua",
+    "modules/wfyb/automation/intervalflip.lua",
+    "modules/wfyb/automation/singleflip.lua",
+
     -- Movement / Bypass / Teleport / Vehicle tools
     "modules/universal/movement/speedhack.lua",
     "modules/universal/movement/fly.lua",
