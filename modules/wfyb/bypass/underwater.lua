@@ -1,4 +1,4 @@
--- "modules/wfyb/underwater.lua"
+-- "modules/wfyb/bypass/underwater.lua"
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
