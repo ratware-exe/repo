@@ -1,4 +1,4 @@
--- "modules/wfyb/vipservercommands.lua"
+-- "modules/wfyb/vipservercommands.lua",
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
