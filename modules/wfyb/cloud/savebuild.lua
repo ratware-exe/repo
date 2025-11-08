@@ -5,7 +5,7 @@ do
 		local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
 		local GlobalEnv = (getgenv and getgenv()) or _G
 		local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
-		local Signal = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
+		local Signal = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Signal.lua"), "@Signal.lua")()
 		
 		-- Get UI references
 		local Library = UI.Library
@@ -23,7 +23,6 @@ do
 			ButtonCooldowns = {
 				Duration = 5, 
 				LastSaveClick = 0,
-				LastOverwriteClick = 0,
 			},
 			NoBoatsNotified = false,
 			ServerRelayBaseUrl = "https://wfyb-serverrelay.wfyb-exploits.workers.dev",
@@ -37,14 +36,7 @@ do
 				RequestSave = false,
 				SelectedBoatName = nil,     
 				OwnedBoatNames = {},      
-				Mode = "new",  
-				OverwriteTarget = nil,    
-				RequestRefreshOverwrite = false,
-				OverwriteMap = {},   
-				OverwriteDisplay = {},   
-				RequestOverwrite = false,         
-				OverwriteSourceBoatName = nil,           
-				OverwriteTargetDisplay = nil,           
+				Mode = "new", -- This module only supports "new" mode
 				Module = nil
 			},
 		}
@@ -77,27 +69,6 @@ do
 			DisabledTooltip = "Feature Disabled",
 			Disabled = false,
 		})
-		local OverwriteGroupbox = Tabs.Cloud:AddRightGroupbox("Overwrite Save", "square-pen")
-		OverwriteGroupbox:AddDropdown("OverwriteSourceBoatDropdown", {
-			Values = {},                     
-			Text = "Select Build:",
-			Multi = false,
-			Searchable = true,
-		})
-		OverwriteGroupbox:AddDivider()
-		OverwriteGroupbox:AddDropdown("OverwriteTargetDropdown", {
-			Values = {},
-			Text = "Select Save Slot:",
-			Multi = false,
-			Searchable = true,
-		})
-		local OverwriteButton = OverwriteGroupbox:AddButton({
-			Text = "Overwrite Save",
-			DoubleClick = true,
-			Tooltip = "Double click to overwrite the selected server save with the selected build",
-			DisabledTooltip = "Pick both dropdowns first",
-			Func = function() end,       
-		})
 		
 		
 		-- [4] CORE LOGIC
@@ -119,59 +90,12 @@ do
 			local function GetBoatsFolder()
 				return Workspace:FindFirstChild("Boats") or nil
 			end
-			local function BuildQuery(params)
-				local acc = {}
-				for k, v in pairs(params) do
-					acc[#acc+1] = k .. "=" .. UrlEncode(HttpService, tostring(v))
-				end
-				return concat(acc, "&")
-			end
-			local function HttpGetJson(url)
-				local ok, res = pcall(HttpGet, url)
-				if not ok or type(res) ~= "string" or #res == 0 then return nil end
-				local okj, obj = pcall(JSONDecode, HttpService, res)
-				if not okj or type(obj) ~= "table" then return nil end
-				return obj
-			end
-			local function ParseFilenameParts(filename)
-				if type(filename) ~= "string" then return nil end
-				local slot, boat = string.match(filename, "^Slot#(%d+):%s*(.-)%s*%(")
-				if not slot then return nil end
-				return { SlotNumber = tonumber(slot), BoatName = boat }
-			end
+
 			local function LocalUserId()
 				local lp = Players.LocalPlayer
 				return (lp and lp.UserId) or 0
 			end
-			local function RefreshOverwriteListForSaveDropdown()
-				local overwriteDisplay = serverState.OverwriteDisplay
-				local overwriteMap = serverState.OverwriteMap
-				overwriteDisplay = {} 
-				overwriteMap = {} 
-				local apiUrl = Variables:GetServerRelayApiUrl()
-				local userId = LocalUserId()
-				local url = apiUrl .. "?" .. BuildQuery({
-					action = "list",
-					userid = userId,
-					t = floor(clock()*1000),
-				})
-				local obj = HttpGetJson(url)
-				if obj and obj.ok and type(obj.files) == "table" then
-					for _, raw in ipairs(obj.files) do
-						local fname = (type(raw) == "string") and raw or tostring(raw or "")
-						if #fname > 0 then
-							local p = ParseFilenameParts(fname)
-							local display = p and ("Slot#%d: %s"):format(p.SlotNumber, p.BoatName) or fname
-							table.insert(overwriteDisplay, display)
-							overwriteMap[display] = fname
-						end
-					end
-				end
-				sort(overwriteDisplay, function(a,b) return tostring(a) < tostring(b) end)
-				serverState.OverwriteDisplay = overwriteDisplay
-				serverState.OverwriteMap = overwriteMap
-				SetDropdownValuesSafe("OverwriteTargetDropdown", overwriteDisplay)
-			end
+	
 			local function GetBoatOwnerUserId(model)
 				if not (model and model:IsA("Model")) then return nil end
 				local attributes = model:GetAttributes()
@@ -247,12 +171,6 @@ do
 						local ssState = Variables.serversave
 						if dropdownKey == "SaveBuildDropdown" then
 							ssState.SelectedBoatName = nil
-						elseif dropdownKey == "OverwriteSourceBoatDropdown" then
-							ssState.OverwriteSourceBoatName = nil
-						elseif dropdownKey == "OverwriteTargetDropdown" then
-							ssState.Mode = "new"
-							ssState.OverwriteTarget = nil
-							ssState.OverwriteTargetDisplay = nil
 						end
 					end
 				end)
@@ -265,7 +183,6 @@ do
 				end)
 			end
 			local function BindBoatsFolderWatchers()
-				serverState.RequestRefreshOverwrite = true
 				serverState.BoatsFolderRef = GetBoatsFolder()
 				serverSaveMaid.BoatsChildAdded = nil
 				serverSaveMaid.BoatsChildRemoved = nil
@@ -292,20 +209,14 @@ do
 				BindBoatsFolderWatchers()
 				serverState.RequestScanBoats = true
 				local heartbeatConnection = RunService.Heartbeat:Connect(function()
-					local requestRefreshOverwrite = serverState.RequestRefreshOverwrite
 					local requestScanBoats = serverState.RequestScanBoats
 					local requestSave = serverState.RequestSave
-					local requestOverwrite = serverState.RequestOverwrite
-					if requestRefreshOverwrite then
-						serverState.RequestRefreshOverwrite = false 
-						RefreshOverwriteListForSaveDropdown()
-					end
+				
 					if requestScanBoats then
 						serverState.RequestScanBoats = false 
 						local names = SnapshotOwnedBoatNamesForLocalPlayer()
 						serverState.OwnedBoatNames = names
 						SetDropdownValuesSafe("SaveBuildDropdown", names)
-						SetDropdownValuesSafe("OverwriteSourceBoatDropdown", names)
 						if #names == 0 then
 							if not Variables.NoBoatsNotified then
 								Variables.NoBoatsNotified = true
@@ -314,6 +225,7 @@ do
 							Variables.NoBoatsNotified = false 
 						end
 					end
+					
 					if requestSave then
 						serverState.RequestSave = false 
 						local selectedBoatName = serverState.SelectedBoatName
@@ -328,13 +240,9 @@ do
 								mode = "ByBoatName",
 								value = selectedBoatName
 							}
-							if serverState.Mode == "overwrite" and type(serverState.OverwriteTarget) == "string" then
-								env.WFYB_SAVE_MODE = "overwrite"
-								env.WFYB_SAVE_TARGET = serverState.OverwriteTarget
-							else
-								env.WFYB_SAVE_MODE = "new"
-								env.WFYB_SAVE_TARGET = nil
-							end
+							-- This module only saves as new
+							env.WFYB_SAVE_MODE = "new"
+							env.WFYB_SAVE_TARGET = nil
 						end
 						local codeUrl = Variables:GetServerCodeUrlSave()
 						local ok, err = pcall(function()
@@ -345,45 +253,9 @@ do
 						if ok then
 							Notify("Success! Build saved, pushing to server.")
 							serverState.RequestScanBoats  = true
-							GlobalEnv.CloudRefreshEvent:Fire() -- Fire event for load module
-							serverState.RequestRefreshOverwrite = true
+							GlobalEnv.CloudRefreshEvent:Fire() -- Fire event for other modules
 						else
 							Notify("Error! Save failed: " .. tostring(err))
-						end
-					end
-					if requestOverwrite then
-						serverState.RequestOverwrite = false 
-						local src = serverState.OverwriteSourceBoatName
-						local tgt = serverState.OverwriteTarget
-						local tgtDisplay = serverState.OverwriteTargetDisplay
-						if not src or src == "" then
-							Notify("Error! Please pick a spawned build first.")
-							return 
-						end
-						if not tgt or tgt == "" then
-							Notify("Error! Please select an old save slot first.")
-							return 
-						end
-						local getgenv_func = getgenv
-						if getgenv_func then
-							local env = getgenv_func()
-							env.WFYB_SAVE_SELECTOR = { mode = "ByBoatName", value = src }
-							env.WFYB_SAVE_MODE = "overwrite"
-							env.WFYB_SAVE_TARGET = tgt
-						end
-						local codeUrl = Variables:GetServerCodeUrlSave()
-						local ok, err = pcall(function()
-							local code = HttpGet(codeUrl)
-							local fn = loadstring(code)
-							return fn()
-						end)
-						if ok then
-							Notify(("Overwriting %s with boat '%s'…"):format(tostring(tgtDisplay or tgt), src))
-							GlobalEnv.CloudRefreshEvent:Fire() -- Fire event for load module
-							serverState.RequestRefreshOverwrite = true
-							-- pcall(LoadInfoSetDefault) -- This function doesn't exist here
-						else
-							Notify("Error! Overwrite failed: " .. tostring(err))
 						end
 					end
 				end)
@@ -394,8 +266,6 @@ do
 				serverState.IsActive = false
 				serverState.RequestSave = false
 				serverState.RequestScanBoats = false
-				serverState.RequestOverwrite = false
-				serverState.RequestRefreshOverwrite = false
 				serverState.BoatsFolderRef = nil
 				pcall(function() serverSaveMaid:DoCleaning() end)
 			end
@@ -438,74 +308,9 @@ do
 				end
 				cd.LastSaveClick = now 
 				Library:Notify("Saving! Please wait...", 4)
-				Variables.serversave.Mode = "new"
+				Variables.serversave.Mode = "new" -- Always new
 				Variables.serversave.OverwriteTarget = nil
 				Variables.serversave.RequestSave = true
-			end
-			if btn then
-				if btn.SetFunction then btn:SetFunction(callback)
-				elseif btn.SetCallback then btn:SetCallback(callback)
-				else btn.Func = callback end 
-			end
-		end)
-		pcall(function()
-			local dd = Options and Options.OverwriteSourceBoatDropdown
-			if dd then
-				if dd.OnOpen then
-					uiMaid:GiveTask(
-						dd:OnOpen(function()
-							Variables.serversave.RequestScanBoats = true
-						end)
-					)
-				end
-				if dd.OnChanged then
-					uiMaid:GiveTask(
-						dd:OnChanged(function(name)
-							Variables.serversave.OverwriteSourceBoatName = name
-						end)
-					)
-				end
-			end
-		end)
-		pcall(function()
-			local dd = Options and Options.OverwriteTargetDropdown
-			if dd then
-				if dd.OnOpen then
-					uiMaid:GiveTask(
-						dd:OnOpen(function()
-							Variables.serversave.RequestRefreshOverwrite = true
-						end)
-					)
-				else
-					Variables.serversave.RequestRefreshOverwrite = true 
-				end
-				if dd.OnChanged then
-					uiMaid:GiveTask(
-						dd:OnChanged(function(display)
-							local ssState = Variables.serversave 
-							ssState.OverwriteTargetDisplay = display
-							local targetFile = ssState.OverwriteMap[display]
-							ssState.OverwriteTarget = targetFile
-							ssState.Mode = targetFile and "overwrite" or "new"
-						end)
-					)
-				end
-			else
-				Variables.serversave.RequestRefreshOverwrite = true 
-			end
-		end)
-		pcall(function()
-			local btn = OverwriteButton
-			local callback = function() 
-				local now = os.clock()
-				local cd = Variables.ButtonCooldowns
-				if (now - cd.LastOverwriteClick) < cd.Duration then
-					Library:Notify("WARNING: Please wait before overwriting again!", 3)
-					return 
-				end
-				cd.LastOverwriteClick = now 
-				Library:Notify("Overwriting! Please wait...", 4)
-				Variables.serversave.RequestOverwrite = true 
 			end
 			if btn then
 				if btn.SetFunction then btn:SetFunction(callback)
