@@ -14,7 +14,6 @@ do
 		local ModuleName = "FireUnderwater"
 		local Variables = {
 			Maids = { [ModuleName] = Maid.new() },
-			NotifyFunc = UI.Notify,
 
 			-- Cannon
 			CannonPatchApplied = false,
