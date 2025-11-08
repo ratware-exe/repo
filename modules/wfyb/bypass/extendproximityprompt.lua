@@ -15,7 +15,7 @@ do
 			
 			-- Auto Trigger State
 			AutoFireEnabled = false,
-			AutoTriggerHeartbeat = nil,
+			-- AutoTriggerHeartbeat = nil, -- Removed, will be stored in Maid
 			
 			-- Nevermore modules
 			L = nil,
@@ -49,11 +49,7 @@ do
 		
 		-- == Helper: Notifier ==
 		local function notify(msg)
-			if Variables.NotifyFunc then
-				pcall(Variables.NotifyFunc, msg)
-			else
-				print(msg) -- Fallback
-			end
+			-- Removed notify calls as requested by user
 		end
 
 		-- == Helper: Load Nevermore ==
@@ -98,7 +94,7 @@ do
 			
 			local cur, hops = att and att.Parent, 0
 			while cur and hops < 8 do
-				local v = cur:FindFirstChild(Variables.CooldownConstants.COOLDOWN_TIME_NAME)
+				local v = cur:FindFirstChild(Variables.CooldownConstants.COOLDOWN_NAME)
 				if v and v:IsA("NumberValue") and typeof(v.Value) == "number" then
 					return v.Value + Variables.GLOBAL_PAD
 				end
@@ -282,29 +278,32 @@ do
 		end
 		
 		local function AutoTriggerStart()
-			if Variables.AutoTriggerHeartbeat then return end -- Already running
+			if maid.AutoTriggerHeartbeat then return end -- Already running
 			if not LoadNevermoreModules() then
 				notify("AutoTrigger: Cannot start, Nevermore modules not found.")
 				return
 			end
 			
 			Variables.AutoFireEnabled = true
-			Variables.AutoTriggerHeartbeat = RbxService.RunService.Heartbeat:Connect(function()
+			
+			-- FIXED: Store the connection in the maid with a key
+			maid.AutoTriggerHeartbeat = RbxService.RunService.Heartbeat:Connect(function()
 				if Variables.AutoFireEnabled then
 					activatePreferredTrigger()
 				end
 			end)
-			maid:GiveTask(Variables.AutoTriggerHeartbeat)
+			
 			notify("Auto Trigger: [ON]")
 		end
 		
 		local function AutoTriggerStop()
 			Variables.AutoFireEnabled = false
-			if Variables.AutoTriggerHeartbeat then
-				maid:RemoveTask(Variables.AutoTriggerHeartbeat) -- Remove from maid
-				Variables.AutoTriggerHeartbeat:Disconnect() -- Disconnect it
-				Variables.AutoTriggerHeartbeat = nil
+			
+			-- FIXED: Clean up the task by setting its key to nil
+			if maid.AutoTriggerHeartbeat then
+				maid.AutoTriggerHeartbeat = nil
 			end
+			
 			notify("Auto Trigger: [OFF]")
 		end
 
