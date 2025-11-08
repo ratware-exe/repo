@@ -282,6 +282,7 @@ do
 			Compact = true,
 			Tooltip = "Changes flight speed.", 
 		})
+		MovementGroupBox:AddDivider()
         
         -- [5] UI WIRING (CORRECTED)
         UI.Toggles.FlightToggle:OnChanged(function(enabledState)
