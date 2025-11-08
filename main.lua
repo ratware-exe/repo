@@ -26,6 +26,7 @@ local featurePaths = {
     "modules/wfyb/teleportplayer.lua",
     "modules/wfyb/teleportboat.lua",
     "modules/wfyb/gyroscope.lua",
+    "modules/universal/notifier/moderatordetection.lua",
     
     -- ESP & Visuals
     "modules/backup/playeresp.lua",
