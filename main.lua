@@ -23,7 +23,7 @@ local featurePaths = {
     "modules/wfyb/infinitestamina.lua",
     "modules/universal/rage/attachtoback.lua",
     "modules/universal/travel/teleportcframe.lua",
-    "modules/wfyb/teleportplayer.lua",
+    "modules/universal/travel/teleportplayer.lua",
     "modules/wfyb/teleportboat.lua",
     "modules/wfyb/gyroscope.lua",
     "modules/universal/notifier/moderatordetection.lua",
