@@ -242,7 +242,7 @@ do
 		end
 
 		-- [4] UI CREATION
-		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
+		local RemovalGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Removals")
 		
 		local NoPopupCooldownToggle = RemovalGroupBox:AddToggle("NoPopupCooldownToggle", {
 			Text = "No Popup Cooldown",
