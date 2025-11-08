@@ -1,5 +1,4 @@
--- "modules/aunderwater.lua"
-print('new')
+-- "modules/fire_underwater.lua"
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
@@ -220,23 +219,23 @@ do
 
 			-- Remove the respawn hook
 			Variables.Maids[ModuleName]:Clean("DesyncCharacterAdded")
-
-			-- Manually unanchor all parts *one last time*
-			if #Variables.CharacterParts == 0 then
-				-- If respawned while disabled, parts list might be empty
-				-- Try to get them one last time
-				UpdateCharacterParts()
-			end
-			
-			for _, part in ipairs(Variables.CharacterParts) do
-				if part and part.Parent then
-					part.Anchored = false
-					part.CanCollide = true
-					part:SetNetworkOwner(LocalPlayer)
-				end
-			end
-			table.clear(Variables.CharacterParts)
 		end
+
+		function Variables.DisableDesync()
+			if not Variables.DesyncEnabled then return end
+			Variables.DesyncEnabled = false
+			notify("Desync: [OFF].")
+
+			-- Stop the loop
+			local threadToCancel = Variables.DesyncThread -- Get local reference
+			Variables.DesyncThread = nil -- Set to nil *before* cancelling to prevent race condition
+
+			if threadToCancel then
+				task.cancel(threadToCancel) -- Cancel the local reference
+			end
+
+			-- Remove the respawn hook
+			Variables.Maids[ModuleName]:Clean("DesyncCharacterAdded")
 
 		-- == Main Control Functions ==
 		local function EnableAllFeatures()
@@ -259,7 +258,7 @@ do
 
 		-- [4] UI CREATION
 		-- Create the UI elements this module needs
-		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Bypass")
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
 		
 		local NoWaterHeightToggle = RemovalGroupBox:AddToggle("NoWaterHeightToggle", {
 			Text = "Fire Underwater",
