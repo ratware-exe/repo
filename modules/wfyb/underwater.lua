@@ -236,6 +236,7 @@ do
 
 			-- Remove the respawn hook
 			Variables.Maids[ModuleName]:Clean("DesyncCharacterAdded")
+		end
 
 		-- == Main Control Functions ==
 		local function EnableAllFeatures()
