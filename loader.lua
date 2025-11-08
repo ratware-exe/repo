@@ -33,6 +33,7 @@ do
 
     local Tabs = {
 		["Info"] = Window:AddTab("Info", "info"),
+		["Temp"] = Window:AddTab("Temp", "info"),
         Main = Window:AddTab("Main", "grip"),
 	    Automation = Window:AddTab("Automation", "bot"),
 	    Visual = Window:AddTab("Visual", "glasses"),
