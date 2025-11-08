@@ -41,15 +41,6 @@ do
 
 		-- [3] CORE LOGIC
 
-		-- == Helper: Notifier ==
-		local function notify(msg)
-			if Variables.NotifyFunc then
-				pcall(Variables.NotifyFunc, msg)
-			else
-				print(msg) -- Fallback
-			end
-		end
-
 		-- == Helper: Load Nevermore ==
 		local function LoadNevermoreModules()
 			if Variables.L then return true end -- Already loaded
