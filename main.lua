@@ -34,6 +34,14 @@ local featurePaths = {
     "modules/wfyb/teleportboat.lua",
     "modules/wfyb/gyroscope.lua",
     "modules/universal/notifier/moderatordetection.lua",
+
+    -- Build
+    "modules/wfyb/build/mirrorsystem.lua",
+    "modules/wfyb/build/angleprecision.lua",
+
+    -- Cloud
+    "modules/wfyb/cloud/loadbuild.lua",
+    "modules/wfyb/cloud/savebuild.lua",
     
     -- ESP & Visuals
     "modules/backup/playeresp.lua",
