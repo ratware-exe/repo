@@ -4,7 +4,7 @@ do
 		-- [1] LOAD DEPENDENCIES
 		local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
 		local GlobalEnv = (getgenv and getgenv()) or _G
-		local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
+		local Maid = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 		
 		-- [2] MODULE STATE
 		local ModuleName = "Aura"
@@ -29,6 +29,10 @@ do
 			if char then
 				return char:FindFirstChildWhichIsA("Humanoid")
 			end
+		end
+		
+		local function getRootPart(char)
+			return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
 		end
 		
 		local function IsAlive(Humanoid)
@@ -63,8 +67,12 @@ do
 		local function AuraLoop()
 			while Variables.RunFlag do
 				local char = getchar()
-				if IsAlive(gethumanoid(char)) then
-					local Tool = char and char:FindFirstChildWhichIsA("Tool")
+				-- CRASH FIX: Check for character, humanoid, and root part
+				local hum = gethumanoid(char)
+				local root = getRootPart(char)
+				
+				if char and hum and root and IsAlive(hum) then
+					local Tool = char:FindFirstChildWhichIsA("Tool")
 					local TouchInterest = Tool and GetTouchInterest(Tool)
 
 					if TouchInterest then
@@ -74,11 +82,12 @@ do
 						local op = Variables.OverlapParams
 						op.FilterDescendantsInstances = Characters
 						
-						-- Use the variable from the slider
+						-- RADIUS FIX: Center on player, not tool
 						local radius = Variables.HitboxSize
 						local size = Vector3.new(radius, radius, radius)
 						
-						local InstancesInBox = RbxService.Workspace:GetPartBoundsInBox(TouchPart.CFrame, TouchPart.Size + size, op)
+						-- RADIUS FIX: Get parts around the player's root part
+						local InstancesInBox = RbxService.Workspace:GetPartBoundsInBox(root.CFrame, size, op)
 
 						for i, v in pairs(InstancesInBox) do
 							local Character = v:FindFirstAncestorWhichIsA("Model")
@@ -120,7 +129,7 @@ do
 		end
 
 		-- [6] UI CREATION
-		local CombatGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Combat")
+		local CombatGroupBox = UI.Tabs.Misc:AddLeftGroupbox("Combat")
 		
 		local AuraToggle = CombatGroupBox:AddToggle("AuraToggle", {
 			Text = "Enable Aura",
