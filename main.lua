@@ -11,6 +11,9 @@ do
 
     local loader = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "loader.lua"), "@loader.lua")()
 
+    -- watermark
+    loadstring(game:HttpGet(GlobalEnv.RepoBase .. "watermark/wfybexploits.lua"), "@watermark/wfybexploits.lua")()
+
 local featurePaths = {
     "watermark/wfybexploits.lua",
     "dependency/UIRegistry.lua",
