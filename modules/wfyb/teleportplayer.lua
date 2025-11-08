@@ -67,7 +67,7 @@ do
         end
 
         -- [4] UI CREATION
-        local TeleportBox = UI.Tabs.Main:AddRightTabbox() 
+        local TeleportBox = UI.Tabs.Main:AddRightTabbox("Teleport") 
 		local PlayerTPTabBox = TeleportBox:AddTab("Player TP")
         PlayerTPTabBox:AddDropdown("PlayerTPDropdown", {
             SpecialType = "Player",
