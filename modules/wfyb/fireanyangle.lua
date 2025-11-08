@@ -65,7 +65,7 @@ do
 
 		-- [4] UI CREATION
 		-- Find or create the "Removals" groupbox (deduplicated by UIRegistry)
-		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Bypass")
 		
 		-- Add the new toggle
 		local AnyAngleCannonsToggle = RemovalGroupBox:AddToggle("AnyAngleCannonsToggle", {
