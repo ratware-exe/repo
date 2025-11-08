@@ -120,7 +120,7 @@ do
 		end
 
 		-- [6] UI CREATION
-		local CombatGroupBox = UI.Tabs.Misc:AddLeftGroupbox("Combat")
+		local CombatGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Combat")
 		
 		local AuraToggle = CombatGroupBox:AddToggle("AuraToggle", {
 			Text = "Enable Aura",
