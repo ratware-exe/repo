@@ -1,20 +1,5 @@
 -- "modules/universal/combat/aura.lua"
 do
-	-- This block cleans up any OLD, GLOBAL versions of this script
-	-- to prevent conflicts with this new module.
-	pcall(function()
-		local connections = getgenv().configs and getgenv().configs.connection
-		if connections then
-			local Disable = configs.Disable
-			for i, v in connections do
-				v:Disconnect()
-			end
-			Disable:Fire()
-			Disable:Destroy()
-			table.clear(configs)
-		end
-	end)
-	
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
 		local RbxService = loadstring(game:HttpGet(_G.RepoBase .. "dependency/Services.lua"), "@Services.lua")()
@@ -144,7 +129,7 @@ do
 		end
 
 		-- [6] UI CREATION
-		local CombatGroupBox = UI.Tabs.Misc:AddLeftGroupbox("Combat")
+		local CombatGroupBox = UI.Tabs.Temp:AddLeftGroupbox("Combat")
 		
 		local AuraToggle = CombatGroupBox:AddToggle("AuraToggle", {
 			Text = "Enable Aura",
@@ -155,7 +140,7 @@ do
 		local AuraRadiusSlider = CombatGroupBox:AddSlider("AuraRadiusSlider", {
 			Text = "Aura Radius",
 			Min = 1,
-			Max = 100,
+			Max = 10,
 			Default = 10,
 			Rounding = 1,
 			Compact = false,
