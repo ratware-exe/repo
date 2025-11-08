@@ -259,7 +259,7 @@ do
 
 		-- [4] UI CREATION
 		-- Create the UI elements this module needs
-		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
+		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Bypass")
 		
 		local NoWaterHeightToggle = RemovalGroupBox:AddToggle("NoWaterHeightToggle", {
 			Text = "Fire Underwater",
