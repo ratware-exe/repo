@@ -146,7 +146,7 @@ do
 		local RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Bypass")
 		
 		local NoWaterHeightToggle = RemovalGroupBox:AddToggle("NoWaterHeightToggle", {
-			Text = "Fire Underwater",
+			Text = "Underwater Check",
 			Tooltip = "Fire weapons underwater.",
 			DisabledTooltip = "Feature Disabled!",
 			Default = false,
