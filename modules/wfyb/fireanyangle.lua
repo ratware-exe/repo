@@ -10,7 +10,6 @@ do
 		local ModuleName = "AnyAngleCannons"
 		local Variables = {
 			Maids = { [ModuleName] = Maid.new() },
-			NotifyFunc = UI.Notify,
 
 			-- Any-Angle cannons (15° floor remover)
 			AnglePatchApplied = false,
@@ -18,15 +17,6 @@ do
 		}
 
 		-- [3] CORE LOGIC
-
-		-- == Helper: Notifier ==
-		local function notify(msg)
-			if Variables.NotifyFunc then
-				pcall(Variables.NotifyFunc, msg)
-			else
-				print(msg) -- Fallback
-			end
-		end
 
 		-- == Helper: Nevermore ==
 		local function getNevermore()
@@ -41,10 +31,7 @@ do
 
 		-- == Any-Angle Cannons Logic ==
 		local function ApplyAnyAngleCannonsPatch()
-			if Variables.AnglePatchApplied then
-				notify("Any-Angle Cannons: already [ON].")
-				return
-			end
+			
 			Variables.AnglePatchedFunctions = Variables.AnglePatchedFunctions or {}
 
 			local OutputBase = getModule("ProjectileOutputBase")
@@ -52,9 +39,6 @@ do
 				table.insert(Variables.AnglePatchedFunctions, { module = OutputBase, key = "IsPointingDown", original = OutputBase.IsPointingDown })
 				OutputBase.IsPointingDown = function(...) return false end -- allow any elevation
 				Variables.AnglePatchApplied = true
-				notify("Any-Angle Cannons: [ON].")
-			else
-				notify("Any-Angle Cannons: target not found (no-op).")
 			end
 		end
 
@@ -71,7 +55,6 @@ do
 			end
 			
 			Variables.AnglePatchApplied = false
-			notify("Any-Angle Cannons: [OFF].")
 		end
 
 		-- == Module Stop Function ==
