@@ -25,15 +25,20 @@ local featurePaths = {
     "modules/universal/movement/fly.lua",
     "modules/universal/movement/noclip.lua",
     "modules/universal/movement/infinitejump.lua",
+
     "modules/wfyb/bypass/infinitestamina.lua",
     "modules/wfyb/bypass/shootunderwater.lua",
     "modules/wfyb/bypass/fireanyangle.lua",
     "modules/wfyb/bypass/firethroughwall.lua",
-    "modules/universal/rage/attachtoback.lua",
+        
+    "modules/universal/abusive/attachtoback.lua",
+    "modules/universal/abusive/invisibility.lua",
+        
     "modules/universal/travel/teleportcframe.lua",
     "modules/universal/travel/teleportplayer.lua",
     "modules/wfyb/teleportboat.lua",
     "modules/wfyb/gyroscope.lua",
+        
     "modules/universal/notifier/moderatordetection.lua",
 
     -- Build
