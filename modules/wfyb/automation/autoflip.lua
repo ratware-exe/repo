@@ -12,7 +12,7 @@ do
             Maids = { [ModuleName] = Maid.new() },
             RunFlag = false,
             Player = RbxService.Players.LocalPlayer,
-            SeatWatchMaids = {}, -- Stores maids for each seat watcher
+            SeatWatchMaids = setmetatable({}, { __mode = "k" }), -- Use weak table for seat maids
         }
         local maid = Variables.Maids[ModuleName] -- Main module maid
 
@@ -61,21 +61,39 @@ do
             return nil
         end
         
+        -- FIX 2: Check for existing Cooldown object
         local function findBoatFlipperRemoteEvent(seatContainer)
             local seatNode = seatContainer:FindFirstChild("Seat")
             if seatNode then
                 local boatFlipper = seatNode:FindFirstChild("BoatFlipper")
                 if boatFlipper then
+                    -- Check if a cooldown is *already* active
+                    local cooldown = boatFlipper:FindFirstChild("Cooldown")
+                    if cooldown then
+                        return nil -- Don't fire, it's already active/cooling down
+                    end
+                    
                     local remoteEvent = boatFlipper:FindFirstChild("BoatFlipperRemoteEvent")
                     if remoteEvent and remoteEvent:IsA("RemoteEvent") then
                         return remoteEvent
                     end
                 end
             end
-            local remoteEventDeep = seatContainer:FindFirstChild("BoatFlipperRemoteEvent", true)
-            if remoteEventDeep and remoteEventDeep:IsA("RemoteEvent") then
-                return remoteEventDeep
+            
+            -- Fallback, but also check for cooldown
+            local boatFlipperDeep = seatContainer:FindFirstChild("BoatFlipper", true)
+            if boatFlipperDeep then
+                local cooldown = boatFlipperDeep:FindFirstChild("Cooldown")
+                if cooldown then
+                    return nil -- Don't fire
+                end
+                
+                local remoteEventDeep = boatFlipperDeep:FindFirstChild("BoatFlipperRemoteEvent")
+                if remoteEventDeep and remoteEventDeep:IsA("RemoteEvent") then
+                    return remoteEventDeep
+                end
             end
+            
             return nil
         end
         
@@ -98,17 +116,23 @@ do
             
             local seatMaid = Maid.new()
             Variables.SeatWatchMaids[seatContainer] = seatMaid
-            maid:GiveTask(seatMaid) -- Give to main maid to clean up on Stop()
+            -- No need to give to main maid, weak table will handle it
             
-            -- 1. Check if flipper already exists
+            -- FIX 1: Watch the *Seat* object, not its parent container
+            local seatNode = seatContainer:FindFirstChild("Seat")
+            if not seatNode then return end -- No seat, nothing to watch
+            
+            -- 1. Check if flipper already exists when we start watching
             local existingRemote = findBoatFlipperRemoteEvent(seatContainer)
             if existingRemote then
                 FireRemote(existingRemote)
             end
             
-            -- 2. Watch for flipper to be added
-            local conn = seatContainer.ChildAdded:Connect(function(child)
+            -- 2. Watch for flipper to be added *to the Seat*
+            local conn = seatNode.ChildAdded:Connect(function(child)
                 if child.Name == "BoatFlipper" then
+                    -- Wait a frame for the remote event to be parented
+                    task.wait() 
                     local remote = findBoatFlipperRemoteEvent(seatContainer)
                     if remote then
                         FireRemote(remote)
@@ -116,6 +140,12 @@ do
                 end
             end)
             seatMaid:GiveTask(conn)
+            
+            -- Clean up this maid if the seat is removed
+            seatMaid:GiveTask(seatNode.Destroying:Connect(function()
+                seatMaid:DoCleaning()
+                Variables.SeatWatchMaids[seatContainer] = nil
+            end))
         end
         
         local function ScanForBoatAndSeats()
@@ -123,6 +153,14 @@ do
             
             local boatModel = getOwnedBoatModel()
             if boatModel then
+                -- Watch for new seats being added (e.g., build mode)
+                maid:GiveTask(boatModel.ChildAdded:Connect(function(child)
+                    if toLowerContainsSeat(child.Name) then
+                        WatchSeat(child)
+                    end
+                end), "BoatChildAdded")
+                
+                -- Watch existing seats
                 for _, child in ipairs(boatModel:GetChildren()) do
                     if toLowerContainsSeat(child.Name) then
                         WatchSeat(child)
@@ -138,8 +176,9 @@ do
             -- Watch for respawns
             maid:GiveTask(Variables.Player.CharacterAdded:Connect(function()
                 task.wait(2) -- Wait for boat to load
+                if not Variables.RunFlag then return end
                 ScanForBoatAndSeats()
-            end))
+            end), "CharacterAdded")
             
             -- Initial scan
             ScanForBoatAndSeats()
@@ -149,12 +188,15 @@ do
             if not Variables.RunFlag then return end
             Variables.RunFlag = false
             
-            -- DoCleaning will stop all watchers and connections
-            maid:DoCleaning()
-            -- Re-create a fresh maid for next time
-            Variables.Maids[ModuleName] = Maid.new()
-            maid = Variables.Maids[ModuleName]
-            Variables.SeatWatchMaids = {}
+            -- Clean up CharacterAdded listener
+            maid:Clean("CharacterAdded")
+            maid:Clean("BoatChildAdded")
+            
+            -- Clean up all individual seat watchers
+            for seat, seatMaid in pairs(Variables.SeatWatchMaids) do
+                seatMaid:DoCleaning()
+            end
+            Variables.SeatWatchMaids = setmetatable({}, { __mode = "k" })
         end
 
         -- [5] UI CREATION
