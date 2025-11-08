@@ -1,4 +1,4 @@
--- "modules/fireunderwater.lua",
+-- "modules/underwater.lua"
 do
 	return function(UI)
 		-- [1] LOAD DEPENDENCIES
@@ -7,7 +7,6 @@ do
 		local Maid = loadstring(game:HttpGet(GlobalEnv.RepoBase .. "dependency/Maid.lua"), "@Maid.lua")()
 		
 		-- UI/Game Services
-		local Toggles = UI.Toggles
 		local Players = RbxService.Players
 		local LocalPlayer = Players.LocalPlayer
 
@@ -250,29 +249,44 @@ do
 			Variables.Maids[ModuleName]:DoCleaning() -- This cleans up CharacterAdded
 		end
 
-		-- [4] UI WIRING
-		-- This hooks into the toggle created by another module
-		if Toggles and Toggles.NoWaterHeightToggle then
-			local maid = Variables.Maids[ModuleName]
-			
-			local function OnChanged(Value)
-				if Value then
-					EnableAllFeatures()
-				else
-					DisableAllFeatures()
-				end
-			end
-			
-			-- Give the connection to the maid so it's cleaned up on Stop()
-			maid:GiveTask(Toggles.NoWaterHeightToggle:OnChanged(OnChanged))
-			
-			-- Apply current state on load
-			OnChanged(Toggles.NoWaterHeightToggle.Value)
+		-- [4] UI CREATION
+		local RemovalGroupBox
+		if UI.Tabs.Main then
+			-- Find or create a 'Removals' groupbox to add to
+			RemovalGroupBox = UI.Tabs.Main:AddLeftGroupbox("Removals")
 		else
-			notify("FireUnderwater module: 'NoWaterHeightToggle' not found.")
+			notify("FireUnderwater: 'Main' tab not found, cannot create UI.")
+			return { Name = ModuleName, Stop = Stop } -- Fail gracefully
 		end
+
+		local NoWaterHeightToggle = RemovalGroupBox:AddToggle("NoWaterHeightToggle", {
+			Text = "Fire Underwater",
+			Tooltip = "Fire weapons underwater.",
+			DisabledTooltip = "Feature Disabled!",
+			Default = false,
+			Disabled = false,
+			Visible = true,
+			Risky = false,
+		})
 		
-		-- [5] RETURN MODULE
+		-- [5] UI WIRING
+		local maid = Variables.Maids[ModuleName]
+
+		local function OnChanged(Value)
+			if Value then
+				EnableAllFeatures()
+			else
+				DisableAllFeatures()
+			end
+		end
+
+		-- Give the connection to the maid so it's cleaned up on Stop()
+		maid:GiveTask(NoWaterHeightToggle:OnChanged(OnChanged))
+
+		-- Apply current state on load
+		OnChanged(NoWaterHeightToggle.Value)
+		
+		-- [6] RETURN MODULE
 		return { Name = ModuleName, Stop = Stop }
 	end
 end
