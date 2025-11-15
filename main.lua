@@ -53,11 +53,16 @@ local featurePaths = {
     -- Build
     "modules/wfyb/build/mirrorsystem.lua",
     "modules/wfyb/build/angleprecision.lua",
+    "modules/wfyb/cloud/proptranslator.lua",
+    "modules/wfyb/cloud/copybuild.lua",
+    "modules/wfyb/cloud/fetchusersavedata.lua",
 
     -- Cloud
     "modules/wfyb/cloud/loadbuild.lua",
     "modules/wfyb/cloud/savebuild.lua",
     "modules/wfyb/cloud/overwritebuild.lua",
+    "modules/wfyb/cloud/rbxstudioexportimport.lua",
+    "modules/wfyb/cloud/proptranslator.lua",
     
     -- ESP & Visuals
     "modules/backup/playeresp.lua",
